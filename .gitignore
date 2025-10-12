@@ -2,3 +2,7 @@ JMdict_b
 *.db
 target/
 JMdict
+JMdictTest
+JMdictCLEAN
+*.gz
+entities
