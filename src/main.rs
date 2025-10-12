@@ -14,16 +14,13 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    if args.fetch_data { fetch_data(); }
+    //if args.fetch_data { fetch_data(); }
     if args.rebuild_db { rebuild_db(); }
 
 
 }
 
 
-fn fetch_data() {
-
-}
 
 fn rebuild_db() {
 
