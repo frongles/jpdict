@@ -932,6 +932,7 @@ dependencies = [
  "clap",
  "quick-xml",
  "reqwest",
+ "serde",
  "serde-xml-rs",
  "sqlx",
 ]
