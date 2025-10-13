@@ -169,7 +169,7 @@ fn read_xml(filename : &str) {
     while true {
         let line = lines.next().unwrap().unwrap();
         let line = line.as_str();
-        let entry = jmserde::Entry {
+        let mut entry = jmserde::Entry {
             ent_seq : 0,
             k_ele   : None, 
             r_ele   : Vec::new(),
@@ -178,7 +178,33 @@ fn read_xml(filename : &str) {
 
         match line {
             "<entry>" => {
-                line = lines.next().unwrap().unwrap();
+                loop {
+                    let line = lines.next().unwrap().unwrap();
+                    let line = line.as_str();
+                    // get entry sequence
+                    if line.starts_with("<ent_seq>") { 
+                        let content = strip_xml(line, "ent_seq");
+                        entry.ent_seq = content.parse().unwrap();
+                    }
+                    else if line.starts_with("<k_ele>") {
+
+                    }
+
+                    else if line.starts_with("<r_ele>") {
+                        let line = lines.next().unwrap().unwrap();
+                        let line = line.as_str();
+                        let reading = jmserde::Reading {
+                            reb     : strip_xml(line, "reb").to_string(),
+                        };
+                        entry.r_ele.push(reading);
+                    }
+
+                    else if line.starts_with("<sense>") {
+
+                    }
+                    else if line.starts_with("</entry>") { break }
+
+                }
             },
             "</entry>" => {
                 //push entry to database
@@ -187,6 +213,12 @@ fn read_xml(filename : &str) {
         }
 
     }
+}
+
+fn strip_xml<'a>(line : &'a str, tag : &str) -> &'a str {
+    line.strip_prefix(&format!("<{}>", tag))
+        .and_then(|s| s.strip_suffix(&format!("</{}>", tag)))
+        .unwrap()
 }
 
 
