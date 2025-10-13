@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap            = { version = "4.5.48", features = ["derive"] }
-reqwest         = { version = "0.12.23", features = ["blocking"] }
-serde           = "1.0.228"
-serde-xml-rs    = { version = "0.8.1" }
-sqlx            = { version = "0.8.6", features = ["macros", "runtime-tokio-native-tls", "sqlite"] }
-tokio           = { version = "1.47.1", features = ["full"] }
 quick-xml       = "0.38.3"
+sqlite          = "0.37.0"
+serde           = { version = "1.0.228", features = ["derive"] }
+serde-xml-rs    = { version = "0.8.1" }
+ureq = "3.1.2"
+flate2 = "1.1.4"
