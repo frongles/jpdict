@@ -17,9 +17,16 @@ pub struct JMdict {
 #[derive(Debug, Deserialize)]
 pub struct Entry {
     pub ent_seq : i32,
+    pub k_ele   : Option<Vec<Kanji>>,
     pub r_ele   : Vec<Reading>,
     pub sense   : Vec<Sense>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Kanji{
+    pub keb     : String,
+}
+
 
 #[derive(Debug, Deserialize)]
 pub struct Reading {

@@ -171,13 +171,14 @@ fn read_xml(filename : &str) {
         let line = line.as_str();
         let entry = jmserde::Entry {
             ent_seq : 0,
+            k_ele   : None, 
             r_ele   : Vec::new(),
             sense   : Vec::new(),
         };
 
         match line {
             "<entry>" => {
-
+                line = lines.next().unwrap().unwrap();
             },
             "</entry>" => {
                 //push entry to database
