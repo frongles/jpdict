@@ -191,18 +191,30 @@ fn read_xml(filename : &str) {
                     }
 
                     else if line.starts_with("<r_ele>") {
-                        let line = lines.next().unwrap().unwrap();
-                        let line = line.as_str();
-                        let reading = jmserde::Reading {
-                            reb     : strip_xml(line, "reb").to_string(),
-                        };
-                        entry.r_ele.push(reading);
+
+                        loop {
+                            let line = lines.next().unwrap().unwrap();
+                            let line = line.as_str();
+                            if line.starts_with("<reb>") {} 
+                            else if line.starts_with("<re_pri>") {}
+                            else if line.starts_with("<re_inf>") {}
+                            else if line == "</r_ele>" { break }
+                        }
                     }
 
-                    else if line.starts_with("<sense>") {
+                    else if line == "<sense>" {
+                        loop {
+                            let line = lines.next().unwrap().unwrap();
+                            let line = line.as_str();
+                            if line.starts_with("<pos>") { }
+                            else if line.starts_with("<gloss>") {}
+                            else if line.starts_with("<x_ref>") {}
+                            else if line.starts_with("<misc>") {}
+                            else if line == "</sense>" { break }
+                        }
 
                     }
-                    else if line.starts_with("</entry>") { break }
+                    else if line == "<entry>" { break }
 
                 }
             },
