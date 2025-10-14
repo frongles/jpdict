@@ -6,6 +6,9 @@ use std::collections::HashMap;
 
 use flate2::read::GzDecoder;
 
+use quick_xml::Reader;
+use quick_xml::events::Event;
+
 use sqlite::Connection;
 use ureq::get;
 
@@ -92,6 +95,8 @@ fn rebuild_db(conn : Connection) {
 
     // Disable foreign key enforcement in SQLite
     conn.execute("PRAGMA foreign_keys = OFF;").unwrap();
+    conn.execute("PRAGMA journal_mode = WAL;").unwrap();
+    conn.execute("PRAGMA synchronous = OFF;").unwrap();
 
     // Recreate tables in dependency order
     let create_statements = [
@@ -144,8 +149,6 @@ fn read_xml(filename : &str) {
     
     let mut reader = BufReader::new(&file);
 
-    let mut outputfile = File::create("placeholder").unwrap();
-
     for line in reader.by_ref().lines() {
         let line = line.unwrap();
         // Read until first XML tag
@@ -166,46 +169,43 @@ fn read_xml(filename : &str) {
         entities.insert(name, value);
     }
     let mut lines = reader.lines();
-    while true {
+
+    loop {
         let line = lines.next().unwrap().unwrap();
-        let line = line.as_str();
-        let mut entry = jmserde::Entry {
-            ent_seq : 0,
-            k_ele   : None, 
-            r_ele   : Vec::new(),
-            sense   : Vec::new(),
-        };
+        let line = line.trim();
+        let mut entry = jmserde::Entry::default();
 
         match line {
             "<entry>" => {
                 loop {
                     let line = lines.next().unwrap().unwrap();
-                    let line = line.as_str();
+                    let line = line.trim();
                     // get entry sequence
                     if line.starts_with("<ent_seq>") { 
                         let content = strip_xml(line, "ent_seq");
                         entry.ent_seq = content.parse().unwrap();
                     }
+                    // get kanji elements
                     else if line.starts_with("<k_ele>") {
-
+                        entry.k_ele = Some(Vec::new());
                     }
-
+                    // get reading elements
                     else if line.starts_with("<r_ele>") {
 
                         loop {
                             let line = lines.next().unwrap().unwrap();
-                            let line = line.as_str();
+                            let line = line.trim();
                             if line.starts_with("<reb>") {} 
                             else if line.starts_with("<re_pri>") {}
                             else if line.starts_with("<re_inf>") {}
                             else if line == "</r_ele>" { break }
                         }
                     }
-
+                    // get sense elements
                     else if line == "<sense>" {
                         loop {
                             let line = lines.next().unwrap().unwrap();
-                            let line = line.as_str();
+                            let line = line.trim();
                             if line.starts_with("<pos>") { }
                             else if line.starts_with("<gloss>") {}
                             else if line.starts_with("<x_ref>") {}
@@ -214,16 +214,72 @@ fn read_xml(filename : &str) {
                         }
 
                     }
-                    else if line == "<entry>" { break }
+                    else if line == "</entry>" { break }
 
                 }
             },
-            "</entry>" => {
-                //push entry to database
-            }
+            "</JMdict>" => break,
             _ => panic!("Your loop logic failed"),
         }
+    }
+}
 
+
+fn read_xml_quick(filename: &str) {
+
+    let file = File::open(filename).unwrap();
+    let buf_reader = BufReader::new(file);
+    let mut reader = Reader::from_reader(buf_reader);
+    reader.config_mut().trim_text(true);
+
+    //let mut entities = HashMap::new();
+    let mut buf = Vec::new();
+    let mut entry = jmserde::Entry::default();
+    let mut in_entry = false;
+    let mut in_r_ele = false;
+    let mut in_sense = false;
+    let mut in_ent_seq = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                match e.name().as_ref() {
+                    b"entry" => {
+                        entry = jmserde::Entry::default();
+                        in_entry = true;
+                    }
+                    b"r_ele" => in_r_ele = true,
+                    b"sense" => in_sense = true,
+                    b"ent_seq" => in_ent_seq = true,
+                    _ => {}
+                }
+            }
+            Ok(Event::Text(e)) => {
+                let text = e.decode().unwrap();
+                if in_ent_seq {
+                    let ent_seq = text.parse().unwrap();
+                    entry.ent_seq = ent_seq;
+                    println!("ent seq {}", ent_seq);
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                match e.name().as_ref() {
+                    b"entry" => {
+                        in_entry = false;
+                        // Do something with the entry here
+                    }
+                    b"r_ele" => in_r_ele = false,
+                    b"sense" => in_sense = false,
+                    b"ent_seq" => in_ent_seq = false,
+
+                    _ => {}
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => println!("Error at position {}: {:?}", reader.buffer_position(), e),
+            _ => {}
+        }
+        buf.clear();
     }
 }
 
@@ -253,4 +309,17 @@ fn test_fetch_data() {
 #[ignore]
 fn test_decompress() {
     decompress("JMdict_b.gz", XMLFILE);
+}
+
+
+#[test]
+fn test_read_xml() {
+    read_xml("test.xml");
+}
+
+
+#[test]
+
+fn test_read_xml_quick() {
+    read_xml_quick("test_nodoc.xml");
 }
