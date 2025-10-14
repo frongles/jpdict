@@ -1,2 +1,1 @@
-pub mod jmserde;
-pub mod sql;
+pub mod jmdict;

@@ -17,24 +17,14 @@ const XMLFILE           : &str = "test.xml";
 pub const DB_FILE       : &str = "jmdict.db";
 
 fn main() {
-/*    let args = std::env::args();
+    let args = std::env::args();
     for argument in args {
         match argument.as_str() {
             "--fetch" => fetch_data(DICT_SERVER, XMLFILE),
             _ => (),
         }
     }
-    let conn = Connection::open(DB_FILE).unwrap();
-    rebuild_db(conn);
-
-    let jmdict = jmserde::parse(XMLFILE);
-
-    for entry in jmdict.entry {
-        //insert entry
-    }
-*/
-
-    read_xml("test.xml");
+    let conn = rebuild_db();
 
 
     println!("Exit success");
@@ -84,17 +74,18 @@ fn decompress(filename : &str, fileout : &str) {
 /// -----------------------------------------------------
 /// Deletes database and sets up tables
 /// -----------------------------------------------------
-fn rebuild_db(conn : Connection) {
+fn rebuild_db() -> Connection {
 
     match fs::remove_file(DB_FILE) {
         Ok(()) => println!("Removed database"),
         Err(e) => eprintln!("Failed to remove database: {}", e),
     }
-
+    let conn = Connection::open(DB_FILE).unwrap();
     // Disable foreign key enforcement in SQLite
     conn.execute("PRAGMA foreign_keys = OFF;").unwrap();
     conn.execute("PRAGMA journal_mode = WAL;").unwrap();
     conn.execute("PRAGMA synchronous = OFF;").unwrap();
+    conn.execute("BEGIN TRANSACTION;").unwrap();
 
     // Recreate tables in dependency order
     let create_statements = [
@@ -136,6 +127,8 @@ fn rebuild_db(conn : Connection) {
 
     // Re-enable foreign key enforcement
     conn.execute("PRAGMA foreign_keys = ON;").unwrap();
+    conn.execute("COMMIT;").unwrap();
+    conn
     //Ok(())
 }
 /// -----------------------------------------------------
@@ -170,7 +163,6 @@ fn read_xml(filename : &str) {
         entities.insert(name, value);
     }
     let mut lines = reader.lines();
-
     // State machine for reading entries into database
     loop {
         let line = lines.next().unwrap().unwrap();
@@ -241,7 +233,7 @@ fn read_xml(filename : &str) {
                     else if line == "</entry>" { break }
 
                 }
-                println!("{:?}", entry);
+                //println!("{:?}", entry);
             },
             "</JMdict>" => break,
             _ => panic!("Your loop logic failed"),
@@ -290,7 +282,6 @@ fn test_fetch_data() {
 fn test_decompress() {
     decompress("JMdict_b.gz", XMLFILE);
 }
-
 
 #[test]
 fn test_read_xml() {
