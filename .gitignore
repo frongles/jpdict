@@ -6,3 +6,4 @@ JMdictTest
 JMdictCLEAN
 *.gz
 entities
+*.xml
