@@ -6,9 +6,6 @@ use std::collections::HashMap;
 
 use flate2::read::GzDecoder;
 
-use quick_xml::Reader;
-use quick_xml::events::Event;
-
 use sqlite::Connection;
 use ureq::get;
 
@@ -20,7 +17,7 @@ const XMLFILE           : &str = "test.xml";
 pub const DB_FILE       : &str = "jmdict.db";
 
 fn main() {
-    let args = std::env::args();
+/*    let args = std::env::args();
     for argument in args {
         match argument.as_str() {
             "--fetch" => fetch_data(DICT_SERVER, XMLFILE),
@@ -35,8 +32,9 @@ fn main() {
     for entry in jmdict.entry {
         //insert entry
     }
+*/
 
-
+    read_xml("JMdict_b.xml");
 
 
     println!("Exit success");
@@ -225,64 +223,6 @@ fn read_xml(filename : &str) {
 }
 
 
-fn read_xml_quick(filename: &str) {
-
-    let file = File::open(filename).unwrap();
-    let buf_reader = BufReader::new(file);
-    let mut reader = Reader::from_reader(buf_reader);
-    reader.config_mut().trim_text(true);
-
-    //let mut entities = HashMap::new();
-    let mut buf = Vec::new();
-    let mut entry = jmserde::Entry::default();
-    let mut in_entry = false;
-    let mut in_r_ele = false;
-    let mut in_sense = false;
-    let mut in_ent_seq = false;
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) => {
-                match e.name().as_ref() {
-                    b"entry" => {
-                        entry = jmserde::Entry::default();
-                        in_entry = true;
-                    }
-                    b"r_ele" => in_r_ele = true,
-                    b"sense" => in_sense = true,
-                    b"ent_seq" => in_ent_seq = true,
-                    _ => {}
-                }
-            }
-            Ok(Event::Text(e)) => {
-                let text = e.decode().unwrap();
-                if in_ent_seq {
-                    let ent_seq = text.parse().unwrap();
-                    entry.ent_seq = ent_seq;
-                    println!("ent seq {}", ent_seq);
-                }
-            }
-            Ok(Event::End(ref e)) => {
-                match e.name().as_ref() {
-                    b"entry" => {
-                        in_entry = false;
-                        // Do something with the entry here
-                    }
-                    b"r_ele" => in_r_ele = false,
-                    b"sense" => in_sense = false,
-                    b"ent_seq" => in_ent_seq = false,
-
-                    _ => {}
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(e) => println!("Error at position {}: {:?}", reader.buffer_position(), e),
-            _ => {}
-        }
-        buf.clear();
-    }
-}
-
 fn strip_xml<'a>(line : &'a str, tag : &str) -> &'a str {
     line.strip_prefix(&format!("<{}>", tag))
         .and_then(|s| s.strip_suffix(&format!("</{}>", tag)))
@@ -314,12 +254,5 @@ fn test_decompress() {
 
 #[test]
 fn test_read_xml() {
-    read_xml("test.xml");
-}
-
-
-#[test]
-
-fn test_read_xml_quick() {
-    read_xml_quick("test_nodoc.xml");
+    read_xml("JMdict_b.xml");
 }
