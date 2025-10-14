@@ -1,7 +1,7 @@
 use std::{fs, io};
 use std::io::copy;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read};
 use std::collections::HashMap;
 
 use flate2::read::GzDecoder;
@@ -233,7 +233,6 @@ fn read_xml(filename : &str) {
                     else if line == "</entry>" { break }
 
                 }
-                //println!("{:?}", entry);
             },
             "</JMdict>" => break,
             _ => panic!("Your loop logic failed"),
@@ -244,16 +243,21 @@ fn read_xml(filename : &str) {
 // Strips xml tags from an inline element and returns the value
 fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String {
     let mut line = line.to_string();
-    if line.contains('&') {
-        for (entity, replacement) in map.iter(){
-            let pattern = format!("&{};", entity);
-            line = line.replace(&pattern, replacement);
-        }
-    }
-    line.strip_prefix(&format!("<{}>", tag))
+    
+    // Get value from xml
+    let mut val = line.strip_prefix(&format!("<{}>", tag))
         .and_then(|s| s.strip_suffix(&format!("</{}>", tag)))
         .unwrap()
-        .to_string()
+        .to_string();
+
+    // Expand if it's an entity
+    if line.contains("&") {
+        match map.get(&val[1..val.len()-1]) {
+            Some(value) => val = value.to_string(),
+            None => (),
+        }
+    }
+    val
 }
 
 fn insert_entry(entry : jmdict::Entry) {
