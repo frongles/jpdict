@@ -6,7 +6,5 @@ edition = "2024"
 [dependencies]
 quick-xml       = "0.38.3"
 sqlite          = "0.37.0"
-serde           = { version = "1.0.228", features = ["derive"] }
-serde-xml-rs    = { version = "0.8.1" }
 ureq = "3.1.2"
 flate2 = "1.1.4"

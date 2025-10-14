@@ -9,7 +9,7 @@ use flate2::read::GzDecoder;
 use sqlite::Connection;
 use ureq::get;
 
-use jpdict::jmserde;
+use jpdict::jmdict;
 
 
 const DICT_SERVER       : &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_b.gz";
@@ -34,7 +34,7 @@ fn main() {
     }
 */
 
-    read_xml("JMdict_b.xml");
+    read_xml("test.xml");
 
 
     println!("Exit success");
@@ -138,15 +138,18 @@ fn rebuild_db(conn : Connection) {
     conn.execute("PRAGMA foreign_keys = ON;").unwrap();
     //Ok(())
 }
-
-
+/// -----------------------------------------------------
+/// read_xml
+/// -----------------------------------------------------
+/// Reads data from JMdict_b.xml, inserting into database
+/// while parsing
+/// -----------------------------------------------------
 fn read_xml(filename : &str) {
-    println!("Preprocessing {}", filename);
     let file = File::open(filename).unwrap();
     let mut entities = HashMap::new(); 
-    
-    let mut reader = BufReader::new(&file);
 
+    let mut reader = BufReader::new(&file);
+    // Collect entity tags for replacement
     for line in reader.by_ref().lines() {
         let line = line.unwrap();
         // Read until first XML tag
@@ -168,10 +171,11 @@ fn read_xml(filename : &str) {
     }
     let mut lines = reader.lines();
 
+    // State machine for reading entries into database
     loop {
         let line = lines.next().unwrap().unwrap();
         let line = line.trim();
-        let mut entry = jmserde::Entry::default();
+        let mut entry = jmdict::Entry::default();
 
         match line {
             "<entry>" => {
@@ -180,41 +184,64 @@ fn read_xml(filename : &str) {
                     let line = line.trim();
                     // get entry sequence
                     if line.starts_with("<ent_seq>") { 
-                        let content = strip_xml(line, "ent_seq");
+                        let content = strip_xml(line, "ent_seq", &entities);
                         entry.ent_seq = content.parse().unwrap();
                     }
                     // get kanji elements
                     else if line.starts_with("<k_ele>") {
-                        entry.k_ele = Some(Vec::new());
-                    }
-                    // get reading elements
-                    else if line.starts_with("<r_ele>") {
-
+                        let mut kanji = jmdict::Kanji::default();
                         loop {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
-                            if line.starts_with("<reb>") {} 
+                            if line.starts_with("<keb>") {
+                                kanji.keb = strip_xml(line, "keb", &entities);
+                            }
+                            if line == "</k_ele>" { break }
+                        }
+                        entry.k_ele.push(kanji);
+                    }
+                    // get reading elements
+                    else if line.starts_with("<r_ele>") {
+                        let mut reading = jmdict::Reading::default();
+                        loop {
+                            let line = lines.next().unwrap().unwrap();
+                            let line = line.trim();
+                            if line.starts_with("<reb>") {  
+                                reading.reb = strip_xml(line, "reb", &entities);
+                            } 
                             else if line.starts_with("<re_pri>") {}
                             else if line.starts_with("<re_inf>") {}
                             else if line == "</r_ele>" { break }
                         }
+                        entry.r_ele.push(reading);
                     }
                     // get sense elements
                     else if line == "<sense>" {
+                        let mut sense = jmdict::Sense::default();
                         loop {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
-                            if line.starts_with("<pos>") { }
-                            else if line.starts_with("<gloss>") {}
-                            else if line.starts_with("<x_ref>") {}
-                            else if line.starts_with("<misc>") {}
+                            if line.starts_with("<pos>") { 
+                                sense.pos.push(strip_xml(line, "pos", &entities))
+                            }
+                            else if line.starts_with("<gloss>") {
+                                sense.gloss.push(strip_xml(line, "gloss", &entities))
+                            }
+                            else if line.starts_with("<x_ref>") {
+                                sense.x_ref.push(strip_xml(line, "x_ref", &entities))
+                            }
+                            else if line.starts_with("<misc>") {
+                                sense.misc.push(strip_xml(line, "misc", &entities))
+                            }
                             else if line == "</sense>" { break }
                         }
+                        entry.sense.push(sense);
 
                     }
                     else if line == "</entry>" { break }
 
                 }
+                println!("{:?}", entry);
             },
             "</JMdict>" => break,
             _ => panic!("Your loop logic failed"),
@@ -222,13 +249,26 @@ fn read_xml(filename : &str) {
     }
 }
 
-
-fn strip_xml<'a>(line : &'a str, tag : &str) -> &'a str {
+// Strips xml tags from an inline element and returns the value
+fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String {
+    let mut line = line.to_string();
+    if line.contains('&') {
+        for (entity, replacement) in map.iter(){
+            let pattern = format!("&{};", entity);
+            line = line.replace(&pattern, replacement);
+        }
+    }
     line.strip_prefix(&format!("<{}>", tag))
         .and_then(|s| s.strip_suffix(&format!("</{}>", tag)))
         .unwrap()
+        .to_string()
 }
 
+fn insert_entry(entry : jmdict::Entry) {
+
+
+
+}
 
 /// ----------------------------------
 /// Tests
