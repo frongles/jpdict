@@ -6,7 +6,7 @@ pub struct JMdict {
 
 #[derive(Debug, Default)]
 pub struct Entry {
-    pub ent_seq : i32,
+    pub ent_seq : i64,
     pub k_ele   : Vec<Kanji>,
     pub r_ele   : Vec<Reading>,
     pub sense   : Vec<Sense>,

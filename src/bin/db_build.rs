@@ -26,6 +26,8 @@ fn main() {
     }
     let conn = rebuild_db();
 
+    read_xml(XMLFILE, conn);
+
 
     println!("Exit success");
 }
@@ -96,28 +98,29 @@ fn rebuild_db() -> Connection {
         "#,
         r#"
         CREATE TABLE IF NOT EXISTS japanese_readings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ent_seq INTEGER NOT NULL,
-            reading TEXT NOT NULL,
-            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq)
+            reb TEXT PRIMARY KEY
         );
         "#,
         r#"
-        CREATE TABLE IF NOT EXISTS metadata (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ent_seq INTEGER NOT NULL,
-            type TEXT NOT NULL,
-            value TEXT NOT NULL,
-            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq)
+        CREATE TABLE IF NOT EXISTS kanji (
+            keb TEXT PRIMARY KEY,
         );
         "#,
         r#"
-        CREATE TABLE IF NOT EXISTS english_glosses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        CREATE TABLE IF NOT EXISTS entries_kanji (
             ent_seq INTEGER NOT NULL,
-            gloss TEXT NOT NULL,
-            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq)
-        );
+            keb TEXT NOT NULL,
+            PRIMARY KEY (ent_seq, keb),
+            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
+            FOREIGN KEY (keb) REFERENCES kanji(keb)
+        "#,
+        r#"
+        CREATE TABLE IF NOT EXISTS entries_readings (
+            ent_seq INTEGER NOT NULL,
+            reb TEXT NOT NULL,
+            PRIMARY KEY (ent_seq, reb),
+            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
+            FOREIGN KEY (ent_seq) REFERENCES japanese_reading(reb)
         "#
     ];
 
@@ -137,7 +140,7 @@ fn rebuild_db() -> Connection {
 /// Reads data from JMdict_b.xml, inserting into database
 /// while parsing
 /// -----------------------------------------------------
-fn read_xml(filename : &str) {
+fn read_xml(filename : &str, conn : Connection) {
     let file = File::open(filename).unwrap();
     let mut entities = HashMap::new(); 
 
@@ -230,7 +233,10 @@ fn read_xml(filename : &str) {
                         entry.sense.push(sense);
 
                     }
-                    else if line == "</entry>" { break }
+                    else if line == "</entry>" { 
+                        insert_entry(entry, &conn);
+                        break;
+                    }
 
                 }
             },
@@ -259,10 +265,48 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
     }
     val
 }
+fn insert_entry(entry : jmdict::Entry, conn : &Connection) {
+    let insert_entr = r#"
+    INSERT INTO entries (ent_seq)
+    VALUES (?);
+    "#;
+    let insert_reading = r#"
+    INSERT INTO japanese_readings (reb)
+    VALUES (?);
+    "#;
+    let insert_kanji = r#"
+    INSERT INTO kanji (keb) 
+    VALUES (?);
+    "#;
+    let link_rd = r#"
+    INSERT INTO entries_readings (ent_seq, reb)
+    VALUES (?, ?);
+    "#;
+    let link_kj = r#"
+    INSERT INTO entries_kanji (ent_seq, keb)
+    VALUES (?, ?);
+    "#;
+    let mut statement = conn.prepare(insert_entr).unwrap();
+    statement.bind((1, entry.ent_seq)).unwrap();
 
-fn insert_entry(entry : jmdict::Entry) {
+    for reading in entry.r_ele {
+        statement = conn.prepare(insert_reading).unwrap();
+        statement.bind((1, reading.reb.as_str())).unwrap();
+        conn.execute(statement);
 
+        statement = conn.prepare(link_rd).unwrap();
+        statement.bind((1, entry.ent_seq)).unwrap();
+        statement.bind((2, reading.reb.as_str())).unwrap();
+    }
 
+    for kanji in entry.k_ele {
+        statement = conn.prepare(insert_kanji).unwrap();
+        statement.bind((1, kanji.keb.as_str())).unwrap();
+
+        statement = conn.prepare(link_kj).unwrap();
+        statement.bind((1, entry.ent_seq)).unwrap();
+        statement.bind((2, kanji.keb.as_str())).unwrap();
+    }
 
 }
 
@@ -285,9 +329,4 @@ fn test_fetch_data() {
 #[ignore]
 fn test_decompress() {
     decompress("JMdict_b.gz", XMLFILE);
-}
-
-#[test]
-fn test_read_xml() {
-    read_xml("JMdict_b.xml");
 }
