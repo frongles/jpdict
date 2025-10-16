@@ -1,11 +1,14 @@
 # To Do
 
-- build a lucidchart flow chart thing
-- Start main.rs
-- build some SQL insertion functions
-- parse JMDict_b
-- insert parsed data into database
-- search functionality...
+X build a lucidchart flow chart thing
+X Start main.rs
+X build some SQL insertion functions
+X parse JMDict_b
+X insert parsed data into database
+X search functionality...
+- full text search functionality
+- materialised lookup table for entries
+- cli tool for interacting
 
 
 
