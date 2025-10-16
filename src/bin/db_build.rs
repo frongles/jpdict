@@ -122,6 +122,24 @@ fn rebuild_db() -> Connection {
             FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
             FOREIGN KEY (reb) REFERENCES japanese_readings(reb)
         );
+        "#,
+        r#"
+        CREATE VIRTUAL TABLE readings_fts
+        USING fts5 (
+            ent_seq,
+            reb
+        "#,
+        r#"
+        CREATE TABLE entry_full AS
+        SELECT e.ent_seq,
+            GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
+            GROUP_CONCAT(DISTINCT rr.reb) AS reading_list
+        FROM entries e
+        LEFT JOIN entries_kanji ek ON e.ent_seq = ek.ent_seq
+        LEFT JOIN kanji kr ON ek.keb = kr.keb
+        LEFT JOIN entries_readings er ON e.ent_seq = er.ent_seq
+        LEFT JOIN japanese_readings rr ON er.reb = rr.reb
+        GROUP BY e.ent_seq;
         "#
     ];
 
