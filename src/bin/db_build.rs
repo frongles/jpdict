@@ -13,7 +13,7 @@ use jpdict::jmdict;
 
 
 const DICT_SERVER       : &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_b.gz";
-const XMLFILE           : &str = "test.xml";
+const XMLFILE           : &str = "JMdict_b.xml";
 pub const DB_FILE       : &str = "jmdict.db";
 
 fn main() {
@@ -27,9 +27,8 @@ fn main() {
     let conn = rebuild_db();
 
     read_xml(XMLFILE, conn);
+    println!("Imported data success");
 
-
-    println!("Exit success");
 }
 
 /// -------------------------------------------------
@@ -133,6 +132,7 @@ fn rebuild_db() -> Connection {
     // Re-enable foreign key enforcement
     conn.execute("PRAGMA foreign_keys = ON;").unwrap();
     conn.execute("COMMIT;").unwrap();
+    println!("Re initialised database");
     conn
     //Ok(())
 }
@@ -270,7 +270,6 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 
 
 fn insert_entry(entry: jmdict::Entry, conn: &sqlite::Connection) {
-    println!("\nInserting entry: {:?}", entry);
     conn.execute("BEGIN TRANSACTION;").unwrap();
     // Prepare each statement once
     let mut insert_entry_stmt = conn
@@ -280,7 +279,7 @@ fn insert_entry(entry: jmdict::Entry, conn: &sqlite::Connection) {
         .prepare("INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);")
         .unwrap();
     let mut insert_kanji_stmt = conn
-        .prepare("INSERT INTO kanji (keb) VALUES (?);")
+        .prepare("INSERT OR IGNORE INTO kanji (keb) VALUES (?);")
         .unwrap();
     let mut link_rd_stmt = conn
         .prepare("INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);")
