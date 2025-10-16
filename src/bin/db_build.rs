@@ -103,7 +103,7 @@ fn rebuild_db() -> Connection {
         "#,
         r#"
         CREATE TABLE IF NOT EXISTS kanji (
-            keb TEXT PRIMARY KEY,
+            keb TEXT PRIMARY KEY
         );
         "#,
         r#"
@@ -113,6 +113,7 @@ fn rebuild_db() -> Connection {
             PRIMARY KEY (ent_seq, keb),
             FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
             FOREIGN KEY (keb) REFERENCES kanji(keb)
+        );
         "#,
         r#"
         CREATE TABLE IF NOT EXISTS entries_readings (
@@ -120,7 +121,8 @@ fn rebuild_db() -> Connection {
             reb TEXT NOT NULL,
             PRIMARY KEY (ent_seq, reb),
             FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
-            FOREIGN KEY (ent_seq) REFERENCES japanese_reading(reb)
+            FOREIGN KEY (reb) REFERENCES japanese_readings(reb)
+        );
         "#
     ];
 
@@ -248,7 +250,7 @@ fn read_xml(filename : &str, conn : Connection) {
 
 // Strips xml tags from an inline element and returns the value
 fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String {
-    let mut line = line.to_string();
+    let line = line.to_string();
     
     // Get value from xml
     let mut val = line.strip_prefix(&format!("<{}>", tag))
@@ -265,50 +267,59 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
     }
     val
 }
-fn insert_entry(entry : jmdict::Entry, conn : &Connection) {
-    let insert_entr = r#"
-    INSERT INTO entries (ent_seq)
-    VALUES (?);
-    "#;
-    let insert_reading = r#"
-    INSERT INTO japanese_readings (reb)
-    VALUES (?);
-    "#;
-    let insert_kanji = r#"
-    INSERT INTO kanji (keb) 
-    VALUES (?);
-    "#;
-    let link_rd = r#"
-    INSERT INTO entries_readings (ent_seq, reb)
-    VALUES (?, ?);
-    "#;
-    let link_kj = r#"
-    INSERT INTO entries_kanji (ent_seq, keb)
-    VALUES (?, ?);
-    "#;
-    let mut statement = conn.prepare(insert_entr).unwrap();
-    statement.bind((1, entry.ent_seq)).unwrap();
 
+
+fn insert_entry(entry: jmdict::Entry, conn: &sqlite::Connection) {
+    println!("\nInserting entry: {:?}", entry);
+    conn.execute("BEGIN TRANSACTION;").unwrap();
+    // Prepare each statement once
+    let mut insert_entry_stmt = conn
+        .prepare("INSERT INTO entries (ent_seq) VALUES (?);")
+        .unwrap();
+    let mut insert_reading_stmt = conn
+        .prepare("INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);")
+        .unwrap();
+    let mut insert_kanji_stmt = conn
+        .prepare("INSERT INTO kanji (keb) VALUES (?);")
+        .unwrap();
+    let mut link_rd_stmt = conn
+        .prepare("INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);")
+        .unwrap();
+    let mut link_kj_stmt = conn
+        .prepare("INSERT INTO entries_kanji (ent_seq, keb) VALUES (?, ?);")
+        .unwrap();
+
+    // Insert the entry
+    insert_entry_stmt.bind((1, entry.ent_seq)).unwrap();
+    insert_entry_stmt.next().unwrap();
+    insert_entry_stmt.reset().unwrap();
+
+    // Insert readings and links
     for reading in entry.r_ele {
-        statement = conn.prepare(insert_reading).unwrap();
-        statement.bind((1, reading.reb.as_str())).unwrap();
-        conn.execute(statement);
+        insert_reading_stmt.bind((1, reading.reb.as_str())).unwrap();
+        insert_reading_stmt.next().unwrap();
+        insert_reading_stmt.reset().unwrap();
 
-        statement = conn.prepare(link_rd).unwrap();
-        statement.bind((1, entry.ent_seq)).unwrap();
-        statement.bind((2, reading.reb.as_str())).unwrap();
+        link_rd_stmt.bind((1, entry.ent_seq)).unwrap();
+        link_rd_stmt.bind((2, reading.reb.as_str())).unwrap();
+        link_rd_stmt.next().unwrap();
+        link_rd_stmt.reset().unwrap();
     }
 
+    // Insert kanji and links
     for kanji in entry.k_ele {
-        statement = conn.prepare(insert_kanji).unwrap();
-        statement.bind((1, kanji.keb.as_str())).unwrap();
+        insert_kanji_stmt.bind((1, kanji.keb.as_str())).unwrap();
+        insert_kanji_stmt.next().unwrap();
+        insert_kanji_stmt.reset().unwrap();
 
-        statement = conn.prepare(link_kj).unwrap();
-        statement.bind((1, entry.ent_seq)).unwrap();
-        statement.bind((2, kanji.keb.as_str())).unwrap();
+        link_kj_stmt.bind((1, entry.ent_seq)).unwrap();
+        link_kj_stmt.bind((2, kanji.keb.as_str())).unwrap();
+        link_kj_stmt.next().unwrap();
+        link_kj_stmt.reset().unwrap();
     }
-
+    conn.execute("COMMIT;").unwrap();
 }
+
 
 /// ----------------------------------
 /// Tests
