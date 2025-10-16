@@ -1,0 +1,56 @@
+use sqlite::Connection;
+
+
+
+fn select_by_ent_seq(ent_seq : i64, conn : Connection) {
+    let s = r#"
+    SELECT
+        e.ent_seq,
+        kr.keb AS kanji,
+        rr.reb AS reading
+    FROM
+        entries e
+    LEFT JOIN
+        entries_kanji ek ON e.ent_seq = ek.ent_seq
+    LEFT JOIN
+        kanji kr ON ek.keb = kr.keb
+    LEFT JOIN
+        entries_readings er ON e.ent_seq = er.ent_seq
+    LEFT JOIN
+        japanese_readings rr ON er.reb = rr.reb
+    WHERE
+        e.ent_seq = ?;
+    "#;
+
+    for row in conn
+        .prepare(s)
+        .unwrap()
+        .into_iter()
+        .bind((1, ent_seq))
+        .unwrap()
+        .map(|row| row.unwrap())
+    {
+        println!("{}|{}|{}",
+            row.read::<i64, _>("ent_seq"),
+            row.read::<&str, _>("kanji"),
+            row.read::<&str, _>("reading")
+        )
+    }
+}
+
+/// -----------------------------------------------------------------
+/// Test 
+/// -----------------------------------------------------------------
+
+
+fn init_db_test() -> Connection {
+    Connection::open("jmdict.db").unwrap()
+}
+
+
+#[test]
+fn test_select_ent_seq() {
+    let conn = init_db_test();
+    let ent_seq = 1001980;
+    select_by_ent_seq(ent_seq, conn);
+}
