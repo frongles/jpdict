@@ -13,7 +13,7 @@ use jpdict::jmdict;
 
 
 const DICT_SERVER       : &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_b.gz";
-const XMLFILE           : &str = "JMdict_b.xml";
+const XMLFILE           : &str = "test.xml";
 pub const DB_FILE       : &str = "jmdict.db";
 
 fn main() {
@@ -26,7 +26,10 @@ fn main() {
     }
     let conn = rebuild_db();
 
-    read_xml(XMLFILE, conn);
+    read_xml(XMLFILE, &conn);
+
+    build_ind(&conn);
+
     println!("Imported data success");
 
 }
@@ -106,6 +109,18 @@ fn rebuild_db() -> Connection {
         );
         "#,
         r#"
+        CREATE TABLE IF NOT EXISTS sense(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ent_seq INTEGER NOT NULL,
+            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq)
+        );
+        "#,
+        r#"
+        CREATE TABLE IF NOT EXISTS eng(
+            gloss TEXT PRIMARY KEY
+        );
+        "#,
+        r#"
         CREATE TABLE IF NOT EXISTS entries_kanji (
             ent_seq INTEGER NOT NULL,
             keb TEXT NOT NULL,
@@ -124,23 +139,15 @@ fn rebuild_db() -> Connection {
         );
         "#,
         r#"
-        CREATE VIRTUAL TABLE readings_fts
-        USING fts5 (
-            ent_seq,
-            reb
-        "#,
-        r#"
-        CREATE TABLE entry_full AS
-        SELECT e.ent_seq,
-            GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
-            GROUP_CONCAT(DISTINCT rr.reb) AS reading_list
-        FROM entries e
-        LEFT JOIN entries_kanji ek ON e.ent_seq = ek.ent_seq
-        LEFT JOIN kanji kr ON ek.keb = kr.keb
-        LEFT JOIN entries_readings er ON e.ent_seq = er.ent_seq
-        LEFT JOIN japanese_readings rr ON er.reb = rr.reb
-        GROUP BY e.ent_seq;
+        CREATE TABLE IF NOT EXISTS sense_eng(
+            sense_id INTEGER NOT NULL,
+            gloss TEXT NOT NULL,
+            PRIMARY KEY (sense_id, gloss),
+            FOREIGN KEY (sense_id) REFERENCES sense(sense_id),
+            FOREIGN KEY (gloss) REFERENCES eng(gloss)
+        );
         "#
+
     ];
 
     for stmt in create_statements.iter() {
@@ -155,12 +162,60 @@ fn rebuild_db() -> Connection {
     //Ok(())
 }
 /// -----------------------------------------------------
+/// build_ind
+/// -----------------------------------------------------
+/// Builds indexes and concatenated tables after forming
+/// database
+/// -----------------------------------------------------
+fn build_ind(conn : &Connection) {
+
+    let statements = [
+        r#"
+        CREATE TABLE entry_full AS
+        SELECT e.ent_seq,
+            GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
+            GROUP_CONCAT(DISTINCT rr.reb) AS reading_list
+        FROM entries e
+        LEFT JOIN entries_kanji ek ON e.ent_seq = ek.ent_seq
+        LEFT JOIN kanji kr ON ek.keb = kr.keb
+        LEFT JOIN entries_readings er ON e.ent_seq = er.ent_seq
+        LEFT JOIN japanese_readings rr ON er.reb = rr.reb
+        GROUP BY e.ent_seq;
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_entries_kanji_ent ON entries_kanji(ent_seq);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_entries_kanji_keb ON entries_kanji(keb);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_entries_readings_ent
+        ON entries_readings(ent_seq);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_entries_readings_reb 
+        ON entries_readings(reb);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
+        "#
+    ];
+    for stmt in statements.iter() {
+        conn.execute(stmt).unwrap();
+    }
+
+
+
+
+}
+
+/// -----------------------------------------------------
 /// read_xml
 /// -----------------------------------------------------
 /// Reads data from JMdict_b.xml, inserting into database
 /// while parsing
 /// -----------------------------------------------------
-fn read_xml(filename : &str, conn : Connection) {
+fn read_xml(filename : &str, conn : &Connection) {
     let file = File::open(filename).unwrap();
     let mut entities = HashMap::new(); 
 
@@ -186,6 +241,7 @@ fn read_xml(filename : &str, conn : Connection) {
         entities.insert(name, value);
     }
     let mut lines = reader.lines();
+    let mut count = 0;
     // State machine for reading entries into database
     loop {
         let line = lines.next().unwrap().unwrap();
@@ -255,16 +311,22 @@ fn read_xml(filename : &str, conn : Connection) {
                     }
                     else if line == "</entry>" { 
                         insert_entry(entry, &conn);
+                        count += 1;
                         break;
                     }
 
                 }
             },
-            "</JMdict>" => break,
+            "</JMdict>" => {
+                println!("Total entries: {}", count);
+                break;
+            }
             _ => panic!("Your loop logic failed"),
         }
     }
 }
+
+
 
 // Strips xml tags from an inline element and returns the value
 fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String {
@@ -290,50 +352,80 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 fn insert_entry(entry: jmdict::Entry, conn: &sqlite::Connection) {
     conn.execute("BEGIN TRANSACTION;").unwrap();
     // Prepare each statement once
-    let mut insert_entry_stmt = conn
+    let mut insert_entry = conn
         .prepare("INSERT INTO entries (ent_seq) VALUES (?);")
         .unwrap();
-    let mut insert_reading_stmt = conn
+    let mut insert_reading = conn
         .prepare("INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);")
         .unwrap();
-    let mut insert_kanji_stmt = conn
+    let mut insert_kanji = conn
         .prepare("INSERT OR IGNORE INTO kanji (keb) VALUES (?);")
         .unwrap();
-    let mut link_rd_stmt = conn
+    let mut link_rd = conn
         .prepare("INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);")
         .unwrap();
-    let mut link_kj_stmt = conn
+    let mut link_kj = conn
         .prepare("INSERT INTO entries_kanji (ent_seq, keb) VALUES (?, ?);")
+        .unwrap();
+    let mut insert_sense = conn
+        .prepare("INSERT INTO sense(ent_seq) VALUES (?) RETURNING id;")
+        .unwrap();
+    let mut insert_gloss = conn
+        .prepare("INSERT OR IGNORE INTO eng(gloss) VALUES (?);")
+        .unwrap();
+    let mut link_sense_gloss = conn
+        .prepare("INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);")
         .unwrap();
 
     // Insert the entry
-    insert_entry_stmt.bind((1, entry.ent_seq)).unwrap();
-    insert_entry_stmt.next().unwrap();
-    insert_entry_stmt.reset().unwrap();
+    insert_entry.bind((1, entry.ent_seq)).unwrap();
+    insert_entry.next().unwrap();
+    insert_entry.reset().unwrap();
 
     // Insert readings and links
     for reading in entry.r_ele {
-        insert_reading_stmt.bind((1, reading.reb.as_str())).unwrap();
-        insert_reading_stmt.next().unwrap();
-        insert_reading_stmt.reset().unwrap();
+        insert_reading.bind((1, reading.reb.as_str())).unwrap();
+        insert_reading.next().unwrap();
+        insert_reading.reset().unwrap();
 
-        link_rd_stmt.bind((1, entry.ent_seq)).unwrap();
-        link_rd_stmt.bind((2, reading.reb.as_str())).unwrap();
-        link_rd_stmt.next().unwrap();
-        link_rd_stmt.reset().unwrap();
+        link_rd.bind((1, entry.ent_seq)).unwrap();
+        link_rd.bind((2, reading.reb.as_str())).unwrap();
+        link_rd.next().unwrap();
+        link_rd.reset().unwrap();
     }
 
     // Insert kanji and links
     for kanji in entry.k_ele {
-        insert_kanji_stmt.bind((1, kanji.keb.as_str())).unwrap();
-        insert_kanji_stmt.next().unwrap();
-        insert_kanji_stmt.reset().unwrap();
+        insert_kanji.bind((1, kanji.keb.as_str())).unwrap();
+        insert_kanji.next().unwrap();
+        insert_kanji.reset().unwrap();
 
-        link_kj_stmt.bind((1, entry.ent_seq)).unwrap();
-        link_kj_stmt.bind((2, kanji.keb.as_str())).unwrap();
-        link_kj_stmt.next().unwrap();
-        link_kj_stmt.reset().unwrap();
+        link_kj.bind((1, entry.ent_seq)).unwrap();
+        link_kj.bind((2, kanji.keb.as_str())).unwrap();
+        link_kj.next().unwrap();
+        link_kj.reset().unwrap();
     }
+    
+    // Insert english meanings
+    for sense in entry.sense {
+        insert_sense.bind((1, entry.ent_seq)).unwrap();
+        insert_sense.next().unwrap();
+
+        let sense_id = insert_sense.read::<i64, _>("id").unwrap();
+        insert_sense.reset().unwrap();
+        
+        for gloss in sense.gloss {
+            insert_gloss.bind((1, gloss.as_str())).unwrap();
+            insert_gloss.next().unwrap();
+            insert_gloss.reset().unwrap();
+
+            link_sense_gloss.bind((1, sense_id)).unwrap();
+            link_sense_gloss.bind((2, gloss.as_str())).unwrap();
+            link_sense_gloss.next().unwrap();
+            link_sense_gloss.reset().unwrap();
+        }
+    }
+
     conn.execute("COMMIT;").unwrap();
 }
 

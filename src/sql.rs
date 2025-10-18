@@ -4,26 +4,12 @@ use sqlite::Connection;
 
 fn search_reading(reading : &str, conn : &Connection) {
     let s = r#"
-    SELECT
-        e.ent_seq,
-        kr.keb AS kanji,
-        rr.reb AS reading
-    FROM
-        japanese_readings rr
-    LEFT JOIN
-        entries_readings er ON rr.reb = er.reb
-    LEFT JOIN
-        entries e ON er.ent_seq = e.ent_seq
-    LEFT JOIN
-        entries_kanji ek ON e.ent_seq = ek.ent_seq
-    LEFT JOIN
-        kanji kr ON ek.keb = kr.keb
-    WHERE
-        e.ent_seq = (
+        SELECT * FROM entry_full
+        WHERE ent_seq IN (
             SELECT ent_seq
             FROM entries_readings
             WHERE reb = ?
-    );
+        );
     "#;
 
     for row in conn
@@ -36,30 +22,16 @@ fn search_reading(reading : &str, conn : &Connection) {
     {
         println!("{}|{}|{}",
             row.read::<i64, _>("ent_seq"),
-            row.read::<&str, _>("kanji"),
-            row.read::<&str, _>("reading")
+            row.read::<&str, _>("kanji_list"),
+            row.read::<&str, _>("reading_list")
     );
     }
 }
 
 fn select_by_ent_seq(ent_seq : i64, conn : &Connection) {
+
     let s = r#"
-    SELECT
-        e.ent_seq,
-        kr.keb AS kanji,
-        rr.reb AS reading
-    FROM
-        entries e
-    LEFT JOIN
-        entries_kanji ek ON e.ent_seq = ek.ent_seq
-    LEFT JOIN
-        kanji kr ON ek.keb = kr.keb
-    LEFT JOIN
-        entries_readings er ON e.ent_seq = er.ent_seq
-    LEFT JOIN
-        japanese_readings rr ON er.reb = rr.reb
-    WHERE
-        e.ent_seq = ?;
+        SELECT * FROM entry_full WHERE ent_seq = ?
     "#;
 
     for row in conn
@@ -72,8 +44,8 @@ fn select_by_ent_seq(ent_seq : i64, conn : &Connection) {
     {
         println!("{}|{}|{}",
             row.read::<i64, _>("ent_seq"),
-            row.read::<&str, _>("kanji"),
-            row.read::<&str, _>("reading")
+            row.read::<&str, _>("kanji_list"),
+            row.read::<&str, _>("reading_list")
         )
     }
 }
