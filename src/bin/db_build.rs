@@ -6,8 +6,10 @@ use std::collections::HashMap;
 
 use flate2::read::GzDecoder;
 
-use sqlite::Connection;
 use ureq::get;
+use rusqlite::Connection;
+use rusqlite::params;
+
 
 use jpdict::jmdict;
 
@@ -86,10 +88,10 @@ fn rebuild_db() -> Connection {
     }
     let conn = Connection::open(DB_FILE).unwrap();
     // Disable foreign key enforcement in SQLite
-    conn.execute("PRAGMA foreign_keys = OFF;").unwrap();
-    conn.execute("PRAGMA journal_mode = WAL;").unwrap();
-    conn.execute("PRAGMA synchronous = OFF;").unwrap();
-    conn.execute("BEGIN TRANSACTION;").unwrap();
+    conn.execute("PRAGMA foreign_keys = OFF;", ()).unwrap();
+    conn.execute("PRAGMA journal_mode = WAL;", ()).unwrap();
+    conn.execute("PRAGMA synchronous = OFF;", ()).unwrap();
+    conn.execute("BEGIN TRANSACTION;", ()).unwrap();
 
     // Recreate tables in dependency order
     let create_statements = [
@@ -151,12 +153,12 @@ fn rebuild_db() -> Connection {
     ];
 
     for stmt in create_statements.iter() {
-        conn.execute(stmt).unwrap();
+        conn.execute(stmt, ()).unwrap();
     }
 
     // Re-enable foreign key enforcement
-    conn.execute("PRAGMA foreign_keys = ON;").unwrap();
-    conn.execute("COMMIT;").unwrap();
+    conn.execute("PRAGMA foreign_keys = ON;", ()).unwrap();
+    conn.execute("COMMIT;", ()).unwrap();
     println!("Re initialised database");
     conn
     //Ok(())
@@ -201,7 +203,7 @@ fn build_ind(conn : &Connection) {
         "#
     ];
     for stmt in statements.iter() {
-        conn.execute(stmt).unwrap();
+        conn.execute(stmt, ()).unwrap();
     }
 
 
@@ -349,84 +351,49 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 }
 
 
-fn insert_entry(entry: jmdict::Entry, conn: &sqlite::Connection) {
-    conn.execute("BEGIN TRANSACTION;").unwrap();
+fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
+    conn.execute("BEGIN TRANSACTION;",()).unwrap();
     // Prepare each statement once
-    let mut insert_entry = conn
-        .prepare("INSERT INTO entries (ent_seq) VALUES (?);")
-        .unwrap();
-    let mut insert_reading = conn
-        .prepare("INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);")
-        .unwrap();
-    let mut insert_kanji = conn
-        .prepare("INSERT OR IGNORE INTO kanji (keb) VALUES (?);")
-        .unwrap();
-    let mut link_rd = conn
-        .prepare("INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);")
-        .unwrap();
-    let mut link_kj = conn
-        .prepare("INSERT INTO entries_kanji (ent_seq, keb) VALUES (?, ?);")
-        .unwrap();
-    let mut insert_sense = conn
-        .prepare("INSERT INTO sense(ent_seq) VALUES (?) RETURNING id;")
-        .unwrap();
-    let mut insert_gloss = conn
-        .prepare("INSERT OR IGNORE INTO eng(gloss) VALUES (?);")
-        .unwrap();
-    let mut link_sense_gloss = conn
-        .prepare("INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);")
-        .unwrap();
+    let insert_entry = "INSERT INTO entries (ent_seq) VALUES (?);";
+    let insert_reading = "INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);";
+    let insert_kanji = "INSERT OR IGNORE INTO kanji (keb) VALUES (?);";
+    let link_rd = "INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);";
+    let link_kj = "INSERT INTO entries_kanji (ent_seq, keb) VALUES (?, ?);";
+    let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?) RETURNING id;";
+    let insert_gloss = "INSERT OR IGNORE INTO eng(gloss) VALUES (?);";
+    let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
 
     // Insert the entry
-    insert_entry.bind((1, entry.ent_seq)).unwrap();
-    insert_entry.next().unwrap();
-    insert_entry.reset().unwrap();
+    conn.execute(insert_entry, params![entry.ent_seq]).unwrap();
 
     // Insert readings and links
     for reading in entry.r_ele {
-        insert_reading.bind((1, reading.reb.as_str())).unwrap();
-        insert_reading.next().unwrap();
-        insert_reading.reset().unwrap();
+        conn.execute(insert_reading, params![reading.reb.as_str()]).unwrap();
 
-        link_rd.bind((1, entry.ent_seq)).unwrap();
-        link_rd.bind((2, reading.reb.as_str())).unwrap();
-        link_rd.next().unwrap();
-        link_rd.reset().unwrap();
+        conn.execute(link_rd, params![entry.ent_seq, reading.reb.as_str()]).unwrap();
     }
 
     // Insert kanji and links
     for kanji in entry.k_ele {
-        insert_kanji.bind((1, kanji.keb.as_str())).unwrap();
-        insert_kanji.next().unwrap();
-        insert_kanji.reset().unwrap();
-
-        link_kj.bind((1, entry.ent_seq)).unwrap();
-        link_kj.bind((2, kanji.keb.as_str())).unwrap();
-        link_kj.next().unwrap();
-        link_kj.reset().unwrap();
+        conn.execute(insert_kanji, params![kanji.keb.as_str()]).unwrap();
+        conn.execute(link_kj, params![entry.ent_seq, kanji.keb.as_str()]).unwrap();
     }
     
     // Insert english meanings
     for sense in entry.sense {
-        insert_sense.bind((1, entry.ent_seq)).unwrap();
-        insert_sense.next().unwrap();
-
-        let sense_id = insert_sense.read::<i64, _>("id").unwrap();
-        insert_sense.reset().unwrap();
+        conn.execute(insert_sense, params![entry.ent_seq]).unwrap();
+        let sense_id = conn.last_insert_rowid();
         
         for gloss in sense.gloss {
-            insert_gloss.bind((1, gloss.as_str())).unwrap();
-            insert_gloss.next().unwrap();
-            insert_gloss.reset().unwrap();
+            conn.execute(insert_gloss, params![gloss.as_str()]).unwrap();
 
-            link_sense_gloss.bind((1, sense_id)).unwrap();
-            link_sense_gloss.bind((2, gloss.as_str())).unwrap();
-            link_sense_gloss.next().unwrap();
-            link_sense_gloss.reset().unwrap();
+            conn.execute(link_sense_gloss,
+                params![sense_id, gloss])
+                .unwrap();
         }
     }
 
-    conn.execute("COMMIT;").unwrap();
+    conn.execute("COMMIT;", ()).unwrap();
 }
 
 

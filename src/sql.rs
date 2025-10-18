@@ -1,6 +1,5 @@
-use sqlite::Connection;
-
-
+use rusqlite::Connection;
+use rusqlite::params;
 
 fn search_reading(reading : &str, conn : &Connection) {
     let s = r#"
@@ -11,21 +10,20 @@ fn search_reading(reading : &str, conn : &Connection) {
             WHERE reb = ?
         );
     "#;
+    let mut stmnt = conn.prepare(s).unwrap();
+    let rows = stmnt.query_map(params![reading], |row| {
+        Ok((
+            row.get::<&str, i64>("ent_seq"),
+            row.get::<&str, String>("kanji_list"),
+            row.get::<&str, String>("reading_list")
+        ))
+    }).unwrap();
 
-    for row in conn
-        .prepare(s)
-        .unwrap()
-        .into_iter()
-        .bind((1, reading))
-        .unwrap()
-        .map(|row| row.unwrap())
-    {
-        println!("{}|{}|{}",
-            row.read::<i64, _>("ent_seq"),
-            row.read::<&str, _>("kanji_list"),
-            row.read::<&str, _>("reading_list")
-    );
+    for row in rows {
+        let row = row.unwrap();
+        println!("{}|{}|{}", row.0.unwrap(), row.1.unwrap(), row.2.unwrap());
     }
+
 }
 
 fn select_by_ent_seq(ent_seq : i64, conn : &Connection) {
@@ -34,20 +32,20 @@ fn select_by_ent_seq(ent_seq : i64, conn : &Connection) {
         SELECT * FROM entry_full WHERE ent_seq = ?
     "#;
 
-    for row in conn
-        .prepare(s)
-        .unwrap()
-        .into_iter()
-        .bind((1, ent_seq))
-        .unwrap()
-        .map(|row| row.unwrap())
-    {
-        println!("{}|{}|{}",
-            row.read::<i64, _>("ent_seq"),
-            row.read::<&str, _>("kanji_list"),
-            row.read::<&str, _>("reading_list")
-        )
+    let mut stmnt = conn.prepare(s).unwrap();
+    let rows = stmnt.query_map(params![ent_seq], |row| {
+        Ok((
+            row.get::<&str, i64>("ent_seq"),
+            row.get::<&str, String>("kanji_list"),
+            row.get::<&str, String>("reading_list")
+        ))
+    }).unwrap();
+
+    for row in rows {
+        let row = row.unwrap();
+        println!("{}|{}|{}", row.0.unwrap(), row.1.unwrap(), row.2.unwrap());
     }
+
 }
 
 /// -----------------------------------------------------------------
