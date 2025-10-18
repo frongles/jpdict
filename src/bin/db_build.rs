@@ -15,7 +15,7 @@ use jpdict::jmdict;
 
 
 const DICT_SERVER       : &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_b.gz";
-const XMLFILE           : &str = "test.xml";
+const XMLFILE           : &str = "JMdict_b.xml";
 pub const DB_FILE       : &str = "jmdict.db";
 
 fn main() {
@@ -89,7 +89,7 @@ fn rebuild_db() -> Connection {
     let conn = Connection::open(DB_FILE).unwrap();
     // Disable foreign key enforcement in SQLite
     conn.execute("PRAGMA foreign_keys = OFF;", ()).unwrap();
-    conn.execute("PRAGMA journal_mode = WAL;", ()).unwrap();
+    let _ = conn.query_row("PRAGMA journal_mode = WAL;", [], |_| Ok(())).unwrap();
     conn.execute("PRAGMA synchronous = OFF;", ()).unwrap();
     conn.execute("BEGIN TRANSACTION;", ()).unwrap();
 
@@ -200,6 +200,18 @@ fn build_ind(conn : &Connection) {
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
+        "#,
+        r#"
+        CREATE VIRTUAL TABLE readings_fts
+        USING fts5(ent_seq UNINDEXED, reb);
+        "#,
+        r#"
+        CREATE VIRTUAL TABLE gloss_fts
+        USING fts5(ent_seq UNINDEXED, gloss);
+        "#,
+        r#"
+        INSERT INTO gloss_fts
+        SELECT * FROM sense_eng;
         "#
     ];
     for stmt in statements.iter() {
@@ -245,6 +257,7 @@ fn read_xml(filename : &str, conn : &Connection) {
     let mut lines = reader.lines();
     let mut count = 0;
     // State machine for reading entries into database
+    conn.execute("BEGIN TRANSACTION;",()).unwrap();
     loop {
         let line = lines.next().unwrap().unwrap();
         let line = line.trim();
@@ -321,6 +334,7 @@ fn read_xml(filename : &str, conn : &Connection) {
             },
             "</JMdict>" => {
                 println!("Total entries: {}", count);
+                conn.execute("COMMIT;", ()).unwrap();
                 break;
             }
             _ => panic!("Your loop logic failed"),
@@ -352,14 +366,13 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 
 
 fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
-    conn.execute("BEGIN TRANSACTION;",()).unwrap();
     // Prepare each statement once
     let insert_entry = "INSERT INTO entries (ent_seq) VALUES (?);";
     let insert_reading = "INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);";
     let insert_kanji = "INSERT OR IGNORE INTO kanji (keb) VALUES (?);";
     let link_rd = "INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);";
     let link_kj = "INSERT INTO entries_kanji (ent_seq, keb) VALUES (?, ?);";
-    let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?) RETURNING id;";
+    let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?);";
     let insert_gloss = "INSERT OR IGNORE INTO eng(gloss) VALUES (?);";
     let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
 
@@ -393,7 +406,6 @@ fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
         }
     }
 
-    conn.execute("COMMIT;", ()).unwrap();
 }
 
 
