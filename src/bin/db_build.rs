@@ -175,14 +175,30 @@ fn build_ind(conn : &Connection) {
         r#"
         CREATE TABLE entry_full AS
         SELECT e.ent_seq,
-            GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
-            GROUP_CONCAT(DISTINCT rr.reb) AS reading_list
+            GROUP_CONCAT(DISTINCT ek.keb) AS kanji_list,
+            GROUP_CONCAT(DISTINCT er.reb) AS reading_list,
+            GROUP_CONCAT(DISTINCT eng.gloss) AS gloss_list
         FROM entries e
         LEFT JOIN entries_kanji ek ON e.ent_seq = ek.ent_seq
-        LEFT JOIN kanji kr ON ek.keb = kr.keb
         LEFT JOIN entries_readings er ON e.ent_seq = er.ent_seq
-        LEFT JOIN japanese_readings rr ON er.reb = rr.reb
-        GROUP BY e.ent_seq;
+        LEFT JOIN sense s ON s.ent_seq = e.ent_seq
+        LEFT JOIN sense_eng se ON s.id = se.sense_id
+        LEFT JOIN eng ON eng.gloss = se.gloss
+        GROUP BY s.id;
+        "#,
+        r#"
+        CREATE TABLE gloss_entry AS
+        SELECT g.gloss,
+            GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
+            GROUP_CONCAT(DISTINCT rr.reb) AS reading_list,
+            GROUP_CONCAT(DISTINCT related.gloss) AS related_gloss
+        FROM eng g
+        LEFT JOIN sense_eng se ON se.gloss = g.gloss
+        LEFT JOIN sense s ON se.sense_id = s.id
+        LEFT JOIN sense_eng related ON se.sense_id = related.sense_id
+        LEFT JOIN entries_kanji kr ON s.ent_seq = kr.ent_seq
+        LEFT JOIN entries_readings rr ON s.ent_seq = rr.ent_seq
+        GROUP BY se.sense_id;
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_entries_kanji_ent ON entries_kanji(ent_seq);
