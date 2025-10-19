@@ -1,9 +1,4 @@
-JMdict_b
+*.xml
 jmdict.db*
 target/
-JMdict
-JMdictTest
-JMdictCLEAN
 *.gz
-entities
-*.xml
