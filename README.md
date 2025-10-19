@@ -1,4 +1,8 @@
+# jpdict
 
+Beginnigs of a Japanese-English dictionary app.
+
+Currently builds a database out of the JMdict_b data (see Data Sources)
 
 
 
