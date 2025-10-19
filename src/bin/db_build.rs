@@ -144,6 +144,20 @@ fn build_ind(conn : &Connection) {
 
     let statements = [
         r#"
+        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_readings 
+        ON readings(ent_seq);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_readings_reb
+        ON readings(reb);
+        "#,
+        r#"
         CREATE TABLE entry_full AS
         SELECT r.ent_seq,
             GROUP_CONCAT(DISTINCT k.keb) AS kanji_list,
@@ -167,20 +181,6 @@ fn build_ind(conn : &Connection) {
         LEFT JOIN kanji kr ON s.ent_seq = kr.ent_seq
         LEFT JOIN readings rr ON s.ent_seq = rr.ent_seq
         GROUP BY se.sense_id;
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq);
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_readings 
-        ON readings(ent_seq);
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_readings_reb
-        ON readings(reb);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
