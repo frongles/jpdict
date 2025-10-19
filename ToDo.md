@@ -17,3 +17,4 @@ X materialised lookup table for entries
     - readings have info as well
     - lots can be a string that can be parsed at runtime probably...
 - edit entry_full and gloss_entry tables so that they only display one kanji, (by kanji priority)
+    - this will also cut down on db size significantly

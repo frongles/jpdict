@@ -104,13 +104,15 @@ fn rebuild_db() -> Connection {
         r#"
         CREATE TABLE IF NOT EXISTS kanji (
             ent_seq INTEGER NOT NULL,
-            keb TEXT NOT NULL
+            keb TEXT NOT NULL,
+            pri TEXT
         );
         "#,
         r#"
         CREATE TABLE IF NOT EXISTS readings (
             ent_seq INTEGER NOT NULL,
-            reb TEXT NOT NULL
+            reb TEXT NOT NULL,
+            pri TEXT
         );
         "#,
         r#"
@@ -143,14 +145,14 @@ fn build_ind(conn : &Connection) {
     let statements = [
         r#"
         CREATE TABLE entry_full AS
-        SELECT k.ent_seq,
+        SELECT r.ent_seq,
             GROUP_CONCAT(DISTINCT k.keb) AS kanji_list,
             GROUP_CONCAT(DISTINCT r.reb) AS reading_list,
             GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
-        FROM kanji k
-        LEFT JOIN readings r ON k.ent_seq = r.ent_seq
-        LEFT JOIN sense s ON s.ent_seq = k.ent_seq
-        LEFT JOIN sense_eng se ON s.id = se.sense_id
+        FROM readings r
+        LEFT JOIN kanji k ON k.ent_seq = r.ent_seq
+        JOIN sense s ON s.ent_seq = r.ent_seq
+        JOIN sense_eng se ON s.id = se.sense_id
         GROUP BY s.id;
         "#,
         r#"
@@ -252,6 +254,9 @@ fn read_xml(filename : &str, conn : &Connection) {
                             if line.starts_with("<keb>") {
                                 kanji.keb = strip_xml(line, "keb", &entities);
                             }
+                            if line.starts_with("<ke_pri>") {
+                                kanji.ke_pri.push(strip_xml(line, "ke_pri", &entities));
+                            }
                             if line == "</k_ele>" { break }
                         }
                         entry.k_ele.push(kanji);
@@ -265,7 +270,9 @@ fn read_xml(filename : &str, conn : &Connection) {
                             if line.starts_with("<reb>") {  
                                 reading.reb = strip_xml(line, "reb", &entities);
                             } 
-                            else if line.starts_with("<re_pri>") {}
+                            else if line.starts_with("<re_pri>") {
+                                reading.re_pri.push(strip_xml(line, "re_pri", &entities));
+                            }
                             else if line.starts_with("<re_inf>") {}
                             else if line == "</r_ele>" { break }
                         }
@@ -337,20 +344,30 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 
 fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
     // Prepare each statement once
-    let link_rd = "INSERT INTO readings (ent_seq, reb) VALUES (?, ?);";
-    let link_kj = "INSERT INTO kanji (ent_seq, keb) VALUES (?, ?);";
+    let link_rd = "INSERT INTO readings (ent_seq, reb, pri) VALUES (?, ?, ?);";
+    let link_kj = "INSERT INTO kanji (ent_seq, keb, pri) VALUES (?, ?, ?);";
     let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?);";
     let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
 
 
     // Insert readings and links
     for reading in entry.r_ele {
-        conn.execute(link_rd, params![entry.ent_seq, reading.reb.as_str()]).unwrap();
+        let pri = reading.re_pri.join(", ");
+        conn.execute(link_rd, params![
+            entry.ent_seq,
+            reading.reb.as_str(),
+            pri]).
+            unwrap();
     }
 
     // Insert kanji and links
     for kanji in entry.k_ele {
-        conn.execute(link_kj, params![entry.ent_seq, kanji.keb.as_str()]).unwrap();
+        let pri = kanji.ke_pri.join(", ");
+        conn.execute(link_kj, params![
+            entry.ent_seq,
+            kanji.keb.as_str(),
+            pri])
+            .unwrap();
     }
     
     // Insert english meanings

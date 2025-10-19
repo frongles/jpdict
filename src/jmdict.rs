@@ -16,7 +16,7 @@ pub struct Entry {
 pub struct Kanji{
     pub keb     : String,
     pub k_inf   : String,
-    pub k_pri   : String,
+    pub ke_pri  : Vec<String>,
 }
 
 
@@ -24,7 +24,7 @@ pub struct Kanji{
 pub struct Reading {
     pub reb     : String,
     pub r_inf   : Vec<String>,
-    pub r_pri   : Vec<String>,
+    pub re_pri   : Vec<String>,
     pub re_restr: Vec<String>,
     pub re_nokanji: String,
 }
