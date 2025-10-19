@@ -96,48 +96,21 @@ fn rebuild_db() -> Connection {
     // Recreate tables in dependency order
     let create_statements = [
         r#"
-        CREATE TABLE IF NOT EXISTS entries (
-            ent_seq INTEGER PRIMARY KEY
-        );
-        "#,
-        r#"
-        CREATE TABLE IF NOT EXISTS japanese_readings (
-            reb TEXT PRIMARY KEY
+        CREATE TABLE IF NOT EXISTS sense(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ent_seq INTEGER NOT NULL
         );
         "#,
         r#"
         CREATE TABLE IF NOT EXISTS kanji (
-            keb TEXT PRIMARY KEY
-        );
-        "#,
-        r#"
-        CREATE TABLE IF NOT EXISTS sense(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
             ent_seq INTEGER NOT NULL,
-            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq)
+            keb TEXT NOT NULL
         );
         "#,
         r#"
-        CREATE TABLE IF NOT EXISTS eng(
-            gloss TEXT PRIMARY KEY
-        );
-        "#,
-        r#"
-        CREATE TABLE IF NOT EXISTS entries_kanji (
+        CREATE TABLE IF NOT EXISTS readings (
             ent_seq INTEGER NOT NULL,
-            keb TEXT NOT NULL,
-            PRIMARY KEY (ent_seq, keb),
-            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
-            FOREIGN KEY (keb) REFERENCES kanji(keb)
-        );
-        "#,
-        r#"
-        CREATE TABLE IF NOT EXISTS entries_readings (
-            ent_seq INTEGER NOT NULL,
-            reb TEXT NOT NULL,
-            PRIMARY KEY (ent_seq, reb),
-            FOREIGN KEY (ent_seq) REFERENCES entries(ent_seq),
-            FOREIGN KEY (reb) REFERENCES japanese_readings(reb)
+            reb TEXT NOT NULL
         );
         "#,
         r#"
@@ -174,45 +147,42 @@ fn build_ind(conn : &Connection) {
     let statements = [
         r#"
         CREATE TABLE entry_full AS
-        SELECT e.ent_seq,
-            GROUP_CONCAT(DISTINCT ek.keb) AS kanji_list,
-            GROUP_CONCAT(DISTINCT er.reb) AS reading_list,
-            GROUP_CONCAT(DISTINCT eng.gloss) AS gloss_list
-        FROM entries e
-        LEFT JOIN entries_kanji ek ON e.ent_seq = ek.ent_seq
-        LEFT JOIN entries_readings er ON e.ent_seq = er.ent_seq
-        LEFT JOIN sense s ON s.ent_seq = e.ent_seq
+        SELECT k.ent_seq,
+            GROUP_CONCAT(DISTINCT k.keb) AS kanji_list,
+            GROUP_CONCAT(DISTINCT r.reb) AS reading_list,
+            GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
+        FROM kanji k
+        LEFT JOIN readings r ON k.ent_seq = r.ent_seq
+        LEFT JOIN sense s ON s.ent_seq = k.ent_seq
         LEFT JOIN sense_eng se ON s.id = se.sense_id
-        LEFT JOIN eng ON eng.gloss = se.gloss
         GROUP BY s.id;
         "#,
         r#"
         CREATE TABLE gloss_entry AS
-        SELECT g.gloss,
+        SELECT se.gloss,
             GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
             GROUP_CONCAT(DISTINCT rr.reb) AS reading_list,
             GROUP_CONCAT(DISTINCT related.gloss) AS related_gloss
-        FROM eng g
-        LEFT JOIN sense_eng se ON se.gloss = g.gloss
+        FROM sense_eng se
         LEFT JOIN sense s ON se.sense_id = s.id
         LEFT JOIN sense_eng related ON se.sense_id = related.sense_id
-        LEFT JOIN entries_kanji kr ON s.ent_seq = kr.ent_seq
-        LEFT JOIN entries_readings rr ON s.ent_seq = rr.ent_seq
+        LEFT JOIN kanji kr ON s.ent_seq = kr.ent_seq
+        LEFT JOIN readings rr ON s.ent_seq = rr.ent_seq
         GROUP BY se.sense_id;
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_entries_kanji_ent ON entries_kanji(ent_seq);
+        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_entries_kanji_keb ON entries_kanji(keb);
+        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_entries_readings_ent
-        ON entries_readings(ent_seq);
+        CREATE INDEX IF NOT EXISTS idx_readings 
+        ON readings(ent_seq);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_entries_readings_reb 
-        ON entries_readings(reb);
+        CREATE INDEX IF NOT EXISTS idx_readings_reb
+        ON readings(reb);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
@@ -383,28 +353,19 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 
 fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
     // Prepare each statement once
-    let insert_entry = "INSERT INTO entries (ent_seq) VALUES (?);";
-    let insert_reading = "INSERT OR IGNORE INTO japanese_readings (reb) VALUES (?);";
-    let insert_kanji = "INSERT OR IGNORE INTO kanji (keb) VALUES (?);";
-    let link_rd = "INSERT INTO entries_readings (ent_seq, reb) VALUES (?, ?);";
-    let link_kj = "INSERT INTO entries_kanji (ent_seq, keb) VALUES (?, ?);";
+    let link_rd = "INSERT INTO readings (ent_seq, reb) VALUES (?, ?);";
+    let link_kj = "INSERT INTO kanji (ent_seq, keb) VALUES (?, ?);";
     let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?);";
-    let insert_gloss = "INSERT OR IGNORE INTO eng(gloss) VALUES (?);";
     let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
 
-    // Insert the entry
-    conn.execute(insert_entry, params![entry.ent_seq]).unwrap();
 
     // Insert readings and links
     for reading in entry.r_ele {
-        conn.execute(insert_reading, params![reading.reb.as_str()]).unwrap();
-
         conn.execute(link_rd, params![entry.ent_seq, reading.reb.as_str()]).unwrap();
     }
 
     // Insert kanji and links
     for kanji in entry.k_ele {
-        conn.execute(insert_kanji, params![kanji.keb.as_str()]).unwrap();
         conn.execute(link_kj, params![entry.ent_seq, kanji.keb.as_str()]).unwrap();
     }
     
@@ -414,7 +375,6 @@ fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
         let sense_id = conn.last_insert_rowid();
         
         for gloss in sense.gloss {
-            conn.execute(insert_gloss, params![gloss.as_str()]).unwrap();
 
             conn.execute(link_sense_gloss,
                 params![sense_id, gloss])

@@ -6,7 +6,7 @@ fn search_reading(reading : &str, conn : &Connection) {
         SELECT * FROM entry_full
         WHERE ent_seq IN (
             SELECT ent_seq
-            FROM entries_readings
+            FROM readings
             WHERE reb = ?
         );
     "#;
