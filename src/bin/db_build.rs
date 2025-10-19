@@ -158,6 +158,12 @@ fn build_ind(conn : &Connection) {
         ON readings(reb);
         "#,
         r#"
+        CREATE INDEX IF NOT EXISTS idx_sense ON sense_eng(sense_id);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_gloss ON sense_eng(gloss);
+        "#,
+        r#"
         CREATE TABLE entry_full AS
         SELECT r.ent_seq,
             GROUP_CONCAT(DISTINCT k.keb) AS kanji_list,
