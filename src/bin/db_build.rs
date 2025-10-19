@@ -116,13 +116,9 @@ fn rebuild_db() -> Connection {
         r#"
         CREATE TABLE IF NOT EXISTS sense_eng(
             sense_id INTEGER NOT NULL,
-            gloss TEXT NOT NULL,
-            PRIMARY KEY (sense_id, gloss),
-            FOREIGN KEY (sense_id) REFERENCES sense(sense_id),
-            FOREIGN KEY (gloss) REFERENCES eng(gloss)
+            gloss TEXT NOT NULL
         );
         "#
-
     ];
 
     for stmt in create_statements.iter() {
@@ -187,18 +183,6 @@ fn build_ind(conn : &Connection) {
         r#"
         CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
         "#,
-        r#"
-        CREATE VIRTUAL TABLE readings_fts
-        USING fts5(ent_seq UNINDEXED, reb);
-        "#,
-        r#"
-        CREATE VIRTUAL TABLE gloss_fts
-        USING fts5(ent_seq UNINDEXED, gloss);
-        "#,
-        r#"
-        INSERT INTO gloss_fts
-        SELECT * FROM sense_eng;
-        "#
     ];
     for stmt in statements.iter() {
         conn.execute(stmt, ()).unwrap();
