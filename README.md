@@ -1,9 +1,14 @@
 # jpdict
 
-Beginnings of a Japanese-English dictionary app.
+Program to build a database out of the open source JMdict project.
 
-Currently builds a database out of the JMdict_b data (see Data Sources)
+Work in progress - yet to integrate much of the metadata involved in JMdict.
 
+## Usage
+For your first run, to download the xml data, run
+```
+cargo run --release --fetch
+```
 
 
 ### Data Sources
