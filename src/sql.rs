@@ -2,52 +2,6 @@
 use rusqlite::Connection;
 use rusqlite::params;
 
-fn search_reading(reading : &str, conn : &Connection) {
-    let s = r#"
-        SELECT * FROM entry_full
-        WHERE ent_seq IN (
-            SELECT ent_seq
-            FROM readings
-            WHERE reb = ?
-        );
-    "#;
-    let mut stmnt = conn.prepare(s).unwrap();
-    let rows = stmnt.query_map(params![reading], |row| {
-        Ok((
-            row.get::<&str, i64>("ent_seq"),
-            row.get::<&str, String>("kanji_list"),
-            row.get::<&str, String>("reading_list")
-        ))
-    }).unwrap();
-
-    for row in rows {
-        let row = row.unwrap();
-        println!("{}|{}|{}", row.0.unwrap(), row.1.unwrap(), row.2.unwrap());
-    }
-
-}
-
-fn select_by_ent_seq(ent_seq : i64, conn : &Connection) {
-
-    let s = r#"
-        SELECT * FROM entry_full WHERE ent_seq = ?
-    "#;
-
-    let mut stmnt = conn.prepare(s).unwrap();
-    let rows = stmnt.query_map(params![ent_seq], |row| {
-        Ok((
-            row.get::<&str, i64>("ent_seq"),
-            row.get::<&str, String>("kanji_list"),
-            row.get::<&str, String>("reading_list")
-        ))
-    }).unwrap();
-
-    for row in rows {
-        let row = row.unwrap();
-        println!("{}|{}|{}", row.0.unwrap(), row.1.unwrap(), row.2.unwrap());
-    }
-
-}
 
 fn get_db_size(conn : &Connection) {
 
@@ -79,20 +33,55 @@ ORDER BY total_bytes DESC;
 
 fn get_by_gloss(gloss : &str, conn : &Connection) {
     let s = r#"
-SELECT * FROM gloss_entry
-WHERE sense_id IN (
+SELECT
+    s.id AS sense_id,
+    s.ent_seq AS ent_seq,
+    
+    -- First kanji by highest priority
+    (SELECT kr.keb
+     FROM kanji kr
+     WHERE kr.ent_seq = s.ent_seq
+     ORDER BY 
+        CASE 
+            WHEN kr.pri LIKE 'news%' THEN 1
+            WHEN kr.pri LIKE 'nf%' THEN 2
+            ELSE 3
+        END,
+        kr.keb
+     LIMIT 1) AS kanji,
+
+    -- First reading by highest priority
+    (SELECT rr.reb
+     FROM readings rr
+     WHERE rr.ent_seq = s.ent_seq
+     ORDER BY 
+        CASE 
+            WHEN rr.pri LIKE 'news%' THEN 1
+            WHEN rr.pri LIKE 'nf%' THEN 2
+            ELSE 3
+        END,
+        rr.reb
+     LIMIT 1) AS reading,
+
+    -- You can still concatenate glosses
+    GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
+
+FROM sense s
+LEFT JOIN sense_eng se ON s.id = se.sense_id
+WHERE s.id IN (
 SELECT sense_id 
 FROM sense_eng
 WHERE gloss = ?
-);
+)
+GROUP BY s.id;
     "#;
     let mut stmnt = conn.prepare(s).unwrap();
     let rows = stmnt.query_map(params![gloss], |row| {
         Ok((
             row.get::<&str, i64>("sense_id"),
             row.get::<&str, i64>("ent_seq"),
-            row.get::<&str, String>("kanji_list"),
-            row.get::<&str, String>("reading_list"),
+            row.get::<&str, String>("kanji"),
+            row.get::<&str, String>("reading"),
             row.get::<&str, String>("gloss_list")
         ))}).unwrap();
     for row in rows {
@@ -107,6 +96,32 @@ WHERE gloss = ?
 }
 
 
+fn get_by_ent_seq(ent_seq : i64, conn : &Connection) {
+    let s = r#"
+SELECT se.sense_id,
+    GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
+FROM 
+sense s
+LEFT JOIN
+sense_eng se ON se.sense_id = s.id
+WHERE
+s.ent_seq = ?
+GROUP BY se.sense_id;
+    "#;
+   let mut stmnt = conn.prepare(s).unwrap();
+   let rows = stmnt.query_map(params![ent_seq], |row| {
+       Ok((
+               row.get::<&str, i64>("sense_id"),
+               row.get::<&str, String>("gloss_list")
+       ))}).unwrap();
+   for row in rows {
+       let row = row.unwrap();
+        println!("{}|{}",
+            row.0.unwrap(),
+            row.1.unwrap());
+    }
+}
+
 /// -----------------------------------------------------------------
 /// Test 
 /// -----------------------------------------------------------------
@@ -117,30 +132,29 @@ fn init_db_test() -> Connection {
 }
 
 #[test]
-fn test_select_ent_seq() {
+fn test_get_by_ent_seq() {
     let conn = init_db_test();
     let ent_seq = 1001980;
-    select_by_ent_seq(ent_seq, &conn);
+    let start = std::time::Instant::now();
+    get_by_ent_seq(ent_seq, &conn);
+    println!("Elapsed: {:?}", start.elapsed());
     
 }
 
 
 #[test]
-fn test_select_reading() {
-    let conn = init_db_test();
-    let reading = "ちょっと";
-    search_reading(reading, &conn);
-}
-
-#[test]
 fn test_size() {
     let conn = init_db_test();
+    let start = std::time::Instant::now();
     get_db_size(&conn);
+    println!("Elapsed: {:?}", start.elapsed());
 }
 
 
 #[test]
 fn test_get_gloss() {
     let conn = init_db_test();
+    let start = std::time::Instant::now();
     get_by_gloss("to run", &conn);
+    println!("Elapsed: {:?}", start.elapsed());
 }

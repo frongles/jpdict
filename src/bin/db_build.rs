@@ -166,44 +166,15 @@ fn build_ind(conn : &Connection) {
         CREATE INDEX IF NOT EXISTS idx_gloss ON sense_eng(gloss);
         "#,
         r#"
-        CREATE TABLE entry_full AS
-        SELECT r.ent_seq,
-            GROUP_CONCAT(DISTINCT k.keb) AS kanji_list,
-            GROUP_CONCAT(DISTINCT r.reb) AS reading_list,
-            GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
-        FROM readings r
-        LEFT JOIN kanji k ON k.ent_seq = r.ent_seq
-        JOIN sense s ON s.ent_seq = r.ent_seq
-        JOIN sense_eng se ON s.id = se.sense_id
-        GROUP BY s.id;
+        CREATE INDEX IF NOT EXISTS idx_sense_id ON sense(id);
         "#,
         r#"
-        CREATE TABLE gloss_entry AS
-        SELECT
-            s.id AS sense_id,
-            s.ent_seq AS ent_seq,
-            GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
-            GROUP_CONCAT(DISTINCT rr.reb) AS reading_list,
-            GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
-        FROM sense s
-        LEFT JOIN sense_eng se ON s.id = se.sense_id
-        LEFT JOIN kanji kr ON s.ent_seq = kr.ent_seq
-        LEFT JOIN readings rr ON s.ent_seq = rr.ent_seq
-        GROUP BY s.id;
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_gloss_entry ON gloss_entry(sense_id);
+        CREATE INDEX IF NOT EXISTS idx_sense_ent ON sense(ent_seq);
         "#,
     ];
     for stmt in statements.iter() {
         conn.execute(stmt, ()).unwrap();
     }
-
-
-
 
 }
 
