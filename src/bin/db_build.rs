@@ -75,6 +75,8 @@ fn decompress(filename : &str, fileout : &str) {
     copy(&mut gz, &mut io::BufWriter::new(out)).unwrap();
 
 }
+
+
 /// -----------------------------------------------------
 /// rebuild_db
 /// -----------------------------------------------------
@@ -177,19 +179,23 @@ fn build_ind(conn : &Connection) {
         "#,
         r#"
         CREATE TABLE gloss_entry AS
-        SELECT se.gloss,
+        SELECT
+            s.id AS sense_id,
+            s.ent_seq AS ent_seq,
             GROUP_CONCAT(DISTINCT kr.keb) AS kanji_list,
             GROUP_CONCAT(DISTINCT rr.reb) AS reading_list,
-            GROUP_CONCAT(DISTINCT related.gloss) AS related_gloss
-        FROM sense_eng se
-        LEFT JOIN sense s ON se.sense_id = s.id
-        LEFT JOIN sense_eng related ON se.sense_id = related.sense_id
+            GROUP_CONCAT(DISTINCT se.gloss) AS gloss_list
+        FROM sense s
+        LEFT JOIN sense_eng se ON s.id = se.sense_id
         LEFT JOIN kanji kr ON s.ent_seq = kr.ent_seq
         LEFT JOIN readings rr ON s.ent_seq = rr.ent_seq
-        GROUP BY se.sense_id;
+        GROUP BY s.id;
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_entry_full ON entry_full(ent_seq);
+        "#,
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_gloss_entry ON gloss_entry(sense_id);
         "#,
     ];
     for stmt in statements.iter() {

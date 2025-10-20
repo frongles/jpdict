@@ -1,7 +1,6 @@
+#![allow(dead_code)]
 use rusqlite::Connection;
 use rusqlite::params;
-
-use crate::jmdict::Kanji;
 
 fn search_reading(reading : &str, conn : &Connection) {
     let s = r#"
@@ -77,6 +76,37 @@ ORDER BY total_bytes DESC;
 
 }
 
+
+fn get_by_gloss(gloss : &str, conn : &Connection) {
+    let s = r#"
+SELECT * FROM gloss_entry
+WHERE sense_id IN (
+SELECT sense_id 
+FROM sense_eng
+WHERE gloss = ?
+);
+    "#;
+    let mut stmnt = conn.prepare(s).unwrap();
+    let rows = stmnt.query_map(params![gloss], |row| {
+        Ok((
+            row.get::<&str, i64>("sense_id"),
+            row.get::<&str, i64>("ent_seq"),
+            row.get::<&str, String>("kanji_list"),
+            row.get::<&str, String>("reading_list"),
+            row.get::<&str, String>("gloss_list")
+        ))}).unwrap();
+    for row in rows {
+        let row = row.unwrap();
+        println!("{}|{}|{}|{}|{}",
+            row.0.unwrap(),
+            row.1.unwrap(),
+            row.2.unwrap(),
+            row.3.unwrap(),
+            row.4.unwrap());
+    }
+}
+
+
 /// -----------------------------------------------------------------
 /// Test 
 /// -----------------------------------------------------------------
@@ -106,4 +136,11 @@ fn test_select_reading() {
 fn test_size() {
     let conn = init_db_test();
     get_db_size(&conn);
+}
+
+
+#[test]
+fn test_get_gloss() {
+    let conn = init_db_test();
+    get_by_gloss("to run", &conn);
 }
