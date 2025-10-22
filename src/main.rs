@@ -225,7 +225,7 @@ fn read_xml(filename : &str, conn : &Connection) {
                     let line = line.trim();
                     // get entry sequence
                     if line.starts_with("<ent_seq>") { 
-                        let content = strip_xml(line, "ent_seq", &entities);
+                        let content = strip_xml(line, "ent_seq");
                         entry.ent_seq = content.parse().unwrap();
                     }
                     // get kanji elements
@@ -235,13 +235,13 @@ fn read_xml(filename : &str, conn : &Connection) {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
                             if line.starts_with("<keb>") {
-                                kanji.keb = strip_xml(line, "keb", &entities);
+                                kanji.keb = strip_xml(line, "keb");
                             }
                             if line.starts_with("<ke_pri>") {
-                                kanji.ke_pri.push(strip_xml(line, "ke_pri", &entities));
+                                kanji.ke_pri.push(strip_xml(line, "ke_pri"));
                             }
                             if line.starts_with("<ke_inf>") {
-                                let value = strip_xml(line, "ke_inf", &entities);
+                                let value = strip_xml(line, "ke_inf");
                                 kanji.ke_inf.push(value);
                             }
                             if line == "</k_ele>" { break }
@@ -255,10 +255,10 @@ fn read_xml(filename : &str, conn : &Connection) {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
                             if line.starts_with("<reb>") {  
-                                reading.reb = strip_xml(line, "reb", &entities);
+                                reading.reb = strip_xml(line, "reb");
                             } 
                             else if line.starts_with("<re_pri>") {
-                                reading.re_pri.push(strip_xml(line, "re_pri", &entities));
+                                reading.re_pri.push(strip_xml(line, "re_pri"));
                             }
                             else if line.starts_with("<re_inf>") {}
                             else if line == "</r_ele>" { break }
@@ -272,16 +272,16 @@ fn read_xml(filename : &str, conn : &Connection) {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
                             if line.starts_with("<pos>") { 
-                                sense.pos.push(strip_xml(line, "pos", &entities))
+                                sense.pos.push(strip_xml(line, "pos"));
                             }
                             else if line.starts_with("<gloss>") {
-                                sense.gloss.push(strip_xml(line, "gloss", &entities))
+                                sense.gloss.push(strip_xml(line, "gloss"));
                             }
                             else if line.starts_with("<x_ref>") {
-                                sense.x_ref.push(strip_xml(line, "x_ref", &entities))
+                                sense.x_ref.push(strip_xml(line, "x_ref"));
                             }
                             else if line.starts_with("<misc>") {
-                                sense.misc.push(strip_xml(line, "misc", &entities))
+                                sense.misc.push(strip_xml(line, "misc"));
                             }
                             else if line == "</sense>" { break }
                         }
@@ -309,7 +309,7 @@ fn read_xml(filename : &str, conn : &Connection) {
 
 
 // Strips xml tags from an inline element and returns the value
-fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String {
+fn strip_xml(line : &str, tag : &str) -> String {
     let line = line.to_string();
     
     // Get value from xml
@@ -318,13 +318,6 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
         .unwrap()
         .to_string();
 
-    // Expand if it's an entity
-    if line.contains("&") {
-        match map.get(&val[1..val.len()-1]) {
-            Some(value) => val = value.to_string(),
-            None => (),
-        }
-    }
     val
 }
 
