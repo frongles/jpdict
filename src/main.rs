@@ -106,7 +106,8 @@ fn rebuild_db() -> Connection {
         CREATE TABLE IF NOT EXISTS kanji (
             ent_seq INTEGER NOT NULL,
             keb TEXT NOT NULL,
-            pri TEXT
+            pri TEXT,
+            inf TEXT
         );
         "#,
         r#"
@@ -239,6 +240,10 @@ fn read_xml(filename : &str, conn : &Connection) {
                             if line.starts_with("<ke_pri>") {
                                 kanji.ke_pri.push(strip_xml(line, "ke_pri", &entities));
                             }
+                            if line.starts_with("<ke_inf>") {
+                                let value = strip_xml(line, "ke_inf", &entities);
+                                kanji.ke_inf.push(value);
+                            }
                             if line == "</k_ele>" { break }
                         }
                         entry.k_ele.push(kanji);
@@ -327,7 +332,7 @@ fn strip_xml(line : &str, tag : &str, map : &HashMap<String, String>) -> String 
 fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
     // Prepare each statement once
     let link_rd = "INSERT INTO readings (ent_seq, reb, pri) VALUES (?, ?, ?);";
-    let link_kj = "INSERT INTO kanji (ent_seq, keb, pri) VALUES (?, ?, ?);";
+    let link_kj = "INSERT INTO kanji (ent_seq, keb, pri, inf) VALUES (?, ?, ?, ?);";
     let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?);";
     let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
 
@@ -345,10 +350,12 @@ fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
     // Insert kanji and links
     for kanji in entry.k_ele {
         let pri = kanji.ke_pri.join(", ");
+        let inf = kanji.ke_inf.join(", ");
         conn.execute(link_kj, params![
             entry.ent_seq,
             kanji.keb.as_str(),
-            pri])
+            pri,
+            inf])
             .unwrap();
     }
     
