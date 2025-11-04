@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::{fs, io};
 use std::io::copy;
 use std::fs::File;
@@ -11,7 +12,6 @@ use rusqlite::Connection;
 use rusqlite::params;
 
 use jpdict::jmdict;
-
 
 const DICT_SERVER       : &str = "http://ftp.edrdg.org/pub/Nihongo/JMdict_b.gz";
 const XMLFILE           : &str = "JMdict_b.xml";
@@ -44,8 +44,8 @@ fn fetch_data (url : &str, fileout : &str) {
     println!("Fetching data from {}", url);
     let gzfile = "temp.gz";
     match fs::remove_file(gzfile) {
-        Ok(()) => eprintln!("Removed {}", gzfile),
-        Err(e) => eprintln!("Failed to remove file {}: {}", gzfile, e),
+        Ok(()) => eprintln!("Removed old {}", gzfile),
+        Err(_e) => {},
     }
     let resp = get(url)
         .call()
@@ -85,7 +85,7 @@ fn rebuild_db() -> Connection {
 
     match fs::remove_file(DB_FILE) {
         Ok(()) => println!("Removed database"),
-        Err(e) => eprintln!("Failed to remove database: {}", e),
+        Err(_e) => {},
     }
     let conn = Connection::open(DB_FILE).unwrap();
     // Disable foreign key enforcement in SQLite
@@ -107,6 +107,7 @@ fn rebuild_db() -> Connection {
             ent_seq INTEGER NOT NULL,
             keb TEXT NOT NULL,
             pri TEXT,
+            pri_rank INT,
             inf TEXT
         );
         "#,
@@ -146,7 +147,7 @@ fn build_ind(conn : &Connection) {
 
     let statements = [
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq);
+        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq, pri_rank);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
@@ -163,7 +164,7 @@ fn build_ind(conn : &Connection) {
         CREATE INDEX IF NOT EXISTS idx_sense ON sense_eng(sense_id);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_gloss ON sense_eng(gloss);
+        CREATE INDEX IF NOT EXISTS idx_gloss ON sense_eng(gloss COLLATE NOCASE);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_sense_id ON sense(id);
@@ -238,7 +239,10 @@ fn read_xml(filename : &str, conn : &Connection) {
                                 kanji.keb = strip_xml(line, "keb");
                             }
                             if line.starts_with("<ke_pri>") {
-                                kanji.ke_pri.push(strip_xml(line, "ke_pri"));
+                                let pri_tag = strip_xml(line, "ke_pri");
+                                let pri = get_pri(&pri_tag);
+                                kanji.ke_pri.push(pri_tag);
+                                kanji.ke_pri_rank = min(pri, kanji.ke_pri_rank);
                             }
                             if line.starts_with("<ke_inf>") {
                                 let value = strip_xml(line, "ke_inf");
@@ -313,7 +317,7 @@ fn strip_xml(line : &str, tag : &str) -> String {
     let line = line.to_string();
     
     // Get value from xml
-    let mut val = line.strip_prefix(&format!("<{}>", tag))
+    let val = line.strip_prefix(&format!("<{}>", tag))
         .and_then(|s| s.strip_suffix(&format!("</{}>", tag)))
         .unwrap()
         .to_string();
@@ -321,11 +325,31 @@ fn strip_xml(line : &str, tag : &str) -> String {
     val
 }
 
+fn get_pri(pristr : &str) -> i32 {
+    match pristr {
+        "news1" => 1,
+        "news2" => 2,
+        "ichi1" => 1,
+        "ichi2" => 2,
+        "spec1" => 1,
+        "spec2" => 2,
+        "gai1" => 1,
+        "gai2" => 2,
+        nf if nf.starts_with("nf") => 1,
+        _ => {
+            println!("Uncaptured priority: {}", pristr);
+            5
+        },
+    }
+
+
+}
+
 
 fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
     // Prepare each statement once
     let link_rd = "INSERT INTO readings (ent_seq, reb, pri) VALUES (?, ?, ?);";
-    let link_kj = "INSERT INTO kanji (ent_seq, keb, pri, inf) VALUES (?, ?, ?, ?);";
+    let link_kj = "INSERT INTO kanji (ent_seq, keb, pri, pri_rank, inf) VALUES (?, ?, ?, ?, ?);";
     let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?);";
     let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
 
@@ -348,6 +372,7 @@ fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
             entry.ent_seq,
             kanji.keb.as_str(),
             pri,
+            kanji.ke_pri_rank,
             inf])
             .unwrap();
     }

@@ -10,8 +10,13 @@ X make sure you have indexes on the things you need indexes for i.e. entries, ka
 X materialised lookup table for entries
 X play around with tauri
 X edit entry_full and gloss_entry tables so that they only display one kanji, (by kanji priority)
-- display japanese entries in initial search
+X Underline on hover effect
+X mouse "back" button matches return functionality
+X Back end, conditional table query, based on character input, to serve to front end
+- Update Home page japanese showings to show kanji + reading,,, distinct on ent_seq
 - create a "japanese entry" page
+- let English entry page navigate to japanese entry page
+
 - spruce up the look a little...
 - import more data into database
     - concat strings for most of sense data probably

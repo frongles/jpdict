@@ -14,9 +14,10 @@ pub struct Entry {
 
 #[derive(Debug, Default)]
 pub struct Kanji{
-    pub keb     : String,
-    pub ke_inf   : Vec<String>,
-    pub ke_pri  : Vec<String>,
+    pub keb         : String,
+    pub ke_inf      : Vec<String>,
+    pub ke_pri      : Vec<String>,
+    pub ke_pri_rank : i32
 }
 
 
