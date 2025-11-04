@@ -23,11 +23,12 @@ pub struct Kanji{
 
 #[derive(Debug, Default)]
 pub struct Reading {
-    pub reb     : String,
-    pub r_inf   : Vec<String>,
-    pub re_pri   : Vec<String>,
-    pub re_restr: Vec<String>,
-    pub re_nokanji: String,
+    pub reb         : String,
+    pub r_inf       : Vec<String>,
+    pub re_pri      : Vec<String>,
+    pub re_pri_rank : i32,
+    pub re_restr    : Vec<String>,
+    pub re_nokanji  : String,
 }
 
 #[derive(Debug, Default)]

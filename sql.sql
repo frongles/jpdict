@@ -1,16 +1,16 @@
 .timer on
 
--- need to turn k.pri into an integer when parsing for this to work well
-
 SELECT
     (SELECT k.keb
      FROM kanji k
      WHERE k.ent_seq = r.ent_seq
-     ORDER BY k.pri_rank, k.keb
+     ORDER BY k.pri_rank
      LIMIT 1) AS top_kanji,
-    r.reb
+    r.reb,
+    r.ent_seq
 FROM readings r
-WHERE r.reb LIKE 'ちてき%'
-ORDER BY r.reb
+WHERE r.reb LIKE 'いく%'
+ORDER BY r.reb, r.pri_rank
 LIMIT 30;
+
 

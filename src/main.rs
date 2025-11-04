@@ -115,7 +115,8 @@ fn rebuild_db() -> Connection {
         CREATE TABLE IF NOT EXISTS readings (
             ent_seq INTEGER NOT NULL,
             reb TEXT NOT NULL,
-            pri TEXT
+            pri TEXT,
+            pri_rank INT
         );
         "#,
         r#"
@@ -147,10 +148,10 @@ fn build_ind(conn : &Connection) {
 
     let statements = [
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq, pri_rank);
+        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
+        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb, pri_rank);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_readings 
@@ -158,7 +159,7 @@ fn build_ind(conn : &Connection) {
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_readings_reb
-        ON readings(reb);
+        ON readings(reb, pri_rank);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_sense ON sense_eng(sense_id);
@@ -232,6 +233,7 @@ fn read_xml(filename : &str, conn : &Connection) {
                     // get kanji elements
                     else if line.starts_with("<k_ele>") {
                         let mut kanji = jmdict::Kanji::default();
+                        kanji.ke_pri_rank = 10;
                         loop {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
@@ -255,6 +257,7 @@ fn read_xml(filename : &str, conn : &Connection) {
                     // get reading elements
                     else if line.starts_with("<r_ele>") {
                         let mut reading = jmdict::Reading::default();
+                        reading.re_pri_rank = 10;
                         loop {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
@@ -262,7 +265,10 @@ fn read_xml(filename : &str, conn : &Connection) {
                                 reading.reb = strip_xml(line, "reb");
                             } 
                             else if line.starts_with("<re_pri>") {
-                                reading.re_pri.push(strip_xml(line, "re_pri"));
+                                let pri_tag = strip_xml(line, "re_pri");
+                                let pri = get_pri(&pri_tag);
+                                reading.re_pri.push(pri_tag);
+                                reading.re_pri_rank = min(pri, reading.re_pri_rank);
                             }
                             else if line.starts_with("<re_inf>") {}
                             else if line == "</r_ele>" { break }
@@ -348,7 +354,7 @@ fn get_pri(pristr : &str) -> i32 {
 
 fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
     // Prepare each statement once
-    let link_rd = "INSERT INTO readings (ent_seq, reb, pri) VALUES (?, ?, ?);";
+    let link_rd = "INSERT INTO readings (ent_seq, reb, pri, pri_rank) VALUES (?, ?, ?, ?);";
     let link_kj = "INSERT INTO kanji (ent_seq, keb, pri, pri_rank, inf) VALUES (?, ?, ?, ?, ?);";
     let insert_sense = "INSERT INTO sense(ent_seq) VALUES (?);";
     let link_sense_gloss = "INSERT INTO sense_eng(sense_id, gloss) VALUES (?, ?);";
@@ -360,7 +366,8 @@ fn insert_entry(entry: jmdict::Entry, conn: &Connection) {
         conn.execute(link_rd, params![
             entry.ent_seq,
             reading.reb.as_str(),
-            pri]).
+            pri,
+            reading.re_pri_rank]).
             unwrap();
     }
 
