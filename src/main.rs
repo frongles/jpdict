@@ -148,18 +148,18 @@ fn build_ind(conn : &Connection) {
 
     let statements = [
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq);
+        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq, pri_rank);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb, pri_rank);
+        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_readings 
-        ON readings(ent_seq);
+        ON readings(ent_seq, pri_rank);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_readings_reb
-        ON readings(reb, pri_rank);
+        ON readings(reb);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_sense ON sense_eng(sense_id);
@@ -233,7 +233,7 @@ fn read_xml(filename : &str, conn : &Connection) {
                     // get kanji elements
                     else if line.starts_with("<k_ele>") {
                         let mut kanji = jmdict::Kanji::default();
-                        kanji.ke_pri_rank = 10;
+                        kanji.ke_pri_rank = 100;
                         loop {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
@@ -257,7 +257,7 @@ fn read_xml(filename : &str, conn : &Connection) {
                     // get reading elements
                     else if line.starts_with("<r_ele>") {
                         let mut reading = jmdict::Reading::default();
-                        reading.re_pri_rank = 10;
+                        reading.re_pri_rank = 100;
                         loop {
                             let line = lines.next().unwrap().unwrap();
                             let line = line.trim();
@@ -333,15 +333,17 @@ fn strip_xml(line : &str, tag : &str) -> String {
 
 fn get_pri(pristr : &str) -> i32 {
     match pristr {
-        "news1" => 1,
-        "news2" => 2,
-        "ichi1" => 1,
-        "ichi2" => 2,
-        "spec1" => 1,
-        "spec2" => 2,
-        "gai1" => 1,
-        "gai2" => 2,
-        nf if nf.starts_with("nf") => 1,
+        "news1" => 50,
+        "news2" => 51,
+        "ichi1" => 52,
+        "ichi2" => 53,
+        "spec1" => 54,
+        "spec2" => 55,
+        "gai1" => 56,
+        "gai2" => 57,
+        nf if nf.starts_with("nf") => {
+            nf[2..].parse().unwrap()
+        },
         _ => {
             println!("Uncaptured priority: {}", pristr);
             5

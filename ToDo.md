@@ -13,7 +13,7 @@ X edit entry_full and gloss_entry tables so that they only display one kanji, (b
 X Underline on hover effect
 X mouse "back" button matches return functionality
 X Back end, conditional table query, based on character input, to serve to front end
-- Update Home page japanese showings to show kanji + reading,,, distinct on ent_seq
+X Update Home page japanese showings to show kanji + reading,,, ~~distinct on ent_seq~~
 - create a "japanese entry" page
 - let English entry page navigate to japanese entry page
 
