@@ -14,7 +14,8 @@ X Underline on hover effect
 X mouse "back" button matches return functionality
 X Back end, conditional table query, based on character input, to serve to front end
 X Update Home page japanese showings to show kanji + reading,,, ~~distinct on ent_seq~~
-- create a "japanese entry" page
+X create a "japanese entry" page
+- restructure sense_eng table, linking table between sense and glosses
 - let English entry page navigate to japanese entry page
 
 - spruce up the look a little...

@@ -148,10 +148,12 @@ fn build_ind(conn : &Connection) {
 
     let statements = [
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji ON kanji(ent_seq, pri_rank);
+        CREATE INDEX IF NOT EXISTS idx_kanji
+        ON kanji(ent_seq, pri_rank);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_kanji_keb ON kanji(keb);
+        CREATE INDEX IF NOT EXISTS idx_kanji_keb
+        ON kanji(keb, pri_rank);
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_readings 
@@ -159,19 +161,19 @@ fn build_ind(conn : &Connection) {
         "#,
         r#"
         CREATE INDEX IF NOT EXISTS idx_readings_reb
-        ON readings(reb);
+        ON readings(reb, pri_rank);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_sense ON sense_eng(sense_id);
+        CREATE INDEX IF NOT EXISTS idx_sense
+        ON sense_eng(sense_id);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_gloss ON sense_eng(gloss COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_gloss
+        ON sense_eng(gloss COLLATE NOCASE);
         "#,
         r#"
-        CREATE INDEX IF NOT EXISTS idx_sense_id ON sense(id);
-        "#,
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_sense_ent ON sense(ent_seq);
+        CREATE INDEX IF NOT EXISTS idx_sense_ent
+        ON sense(ent_seq);
         "#,
     ];
     for stmt in statements.iter() {
